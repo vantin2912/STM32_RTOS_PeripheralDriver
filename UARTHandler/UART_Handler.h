@@ -12,32 +12,30 @@
 #include "cmsis_os.h"
 
 
-#define UART_RcvCpl_Event 		0b0001
-#define UART_RcvToIdleCpl_Event 0b0010
-#define UART_TxCpl_Event		0b0100
+#define UART_OS_RcvCpl_Event 		0b0001
+#define UART_OS_RcvToIdleCpl_Event 0b0010
+#define UART_OS_TxCpl_Event		0b0100
 
-typedef struct UARTHandler_Struct
+typedef struct UART_OS_HandlerStruct
 {
 	UART_HandleTypeDef* huart;
 	osMutexId_t RXMutex, TXMutex;
 	osEventFlagsId_t EventFlags;
 
-	uint8_t* RxBuffer;
-	uint16_t RxLen;
-	uint16_t RxBufferSize;
-} UARTHandler_Struct;
+	volatile uint16_t RxLen;
+} UART_OS_HandlerStruct;
 
-void UART_Start(UARTHandler_Struct* UART);
+void UART_OS_Init(UART_OS_HandlerStruct* UART, UART_HandleTypeDef* huart);
 
-int UART_Transmit(UARTHandler_Struct* UART, uint8_t* Buffer, uint16_t size);
-int UART_printf(UARTHandler_Struct* UART, char* fmt,...);
+int UART_OS_Transmit(UART_OS_HandlerStruct* UART, uint8_t* Buffer, uint16_t size);
+int UART_OS_printf(UART_OS_HandlerStruct* UART, char* fmt,...);
 
-int UART_Receive_ToIdle(UARTHandler_Struct* UART, uint8_t* RcvBuffer, uint16_t* RcvLen, uint16_t MaxRcv, uint32_t timeout);
-int UART_Receive(UARTHandler_Struct* UART,  uint8_t* RcvBuffer, uint8_t RcvLen, uint32_t timeout);
+int UART_OS_Receive_ToIdle(UART_OS_HandlerStruct* UART, uint8_t* RcvBuffer, uint16_t* RcvLen, uint16_t MaxRcv, uint32_t timeout);
+int UART_OS_Receive(UART_OS_HandlerStruct* UART,  uint8_t* RcvBuffer, uint8_t RcvLen, uint32_t timeout);
 
-void UART_RxCplt_CB(UARTHandler_Struct* UART);
-void UART_TxCplt_CB(UARTHandler_Struct* UART);
+void UART_OS_RxCplt_CB(UART_OS_HandlerStruct* UART);
+void UART_OS_TxCplt_CB(UART_OS_HandlerStruct* UART);
 
-void UART_RcvToIdle_CB(UARTHandler_Struct* UART, uint16_t RcvLen);
+void UART_OS_RcvToIdle_CB(UART_OS_HandlerStruct* UART, uint16_t RcvLen);
 
 #endif /* UARTHANDLER_UART_HANDLER_H_ */
