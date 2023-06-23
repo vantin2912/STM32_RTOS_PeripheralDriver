@@ -61,8 +61,8 @@ int UART_OS_Receive_ToIdle(UART_OS_HandlerStruct* UART, uint8_t* RcvBuffer, uint
 {
 	int Status = 0;
 	Status = osMutexAcquire(UART->RXMutex, timeout);
-	if(Status == osErrorTimeout) return -HAL_TIMEOUT;
-	else if (Status < 0 ) return -HAL_ERROR;
+	if(Status == osErrorTimeout) return osErrorTimeout;
+	else if (Status < 0 ) return osError;
 
 	osEventFlagsClear(UART->EventFlags, UART_OS_RcvToIdleCpl_Event);
 	Status = HAL_UARTEx_ReceiveToIdle_DMA(UART->huart, RcvBuffer, MaxRcv);
@@ -72,7 +72,7 @@ int UART_OS_Receive_ToIdle(UART_OS_HandlerStruct* UART, uint8_t* RcvBuffer, uint
 	{
 		HAL_UART_AbortReceive(UART->huart);
 		osMutexRelease(UART->RXMutex);
-		return -Status;
+		return osError;
 	}
 
 	Status = osEventFlagsWait(UART->EventFlags, UART_OS_RcvToIdleCpl_Event, osFlagsWaitAll, timeout);
@@ -81,13 +81,14 @@ int UART_OS_Receive_ToIdle(UART_OS_HandlerStruct* UART, uint8_t* RcvBuffer, uint
 	{
 		*RcvLen = UART->RxLen;
 		UART->RxLen = 0;
+//		Status = osOK
 	}
 	HAL_UART_AbortReceive(UART->huart);
 	osEventFlagsClear(UART->EventFlags, UART_OS_RcvToIdleCpl_Event);
 	osMutexRelease(UART->RXMutex);
 //	SyncPrintf("Proc Time %ld \r\n", osKernelGetTickCount()-timeStart);
 
-	return HAL_OK;
+	return osOK;
 }
 
 int UART_OS_Receive(UART_OS_HandlerStruct* UART,  uint8_t* RcvBuffer, uint8_t RcvLen, uint32_t timeout)

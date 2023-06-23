@@ -3,6 +3,7 @@
 
 int CAN_OS_Init(CAN_OS_HandlerStruct* CANHandler, CAN_HandleTypeDef* hcan)
 {
+	HAL_CAN_Stop(hcan);
 	CANHandler->hcan = hcan;
 	CANHandler->EventFlag = osEventFlagsNew(NULL);
 	CANHandler->TxSemaphore = osSemaphoreNew(CAN_OS_TxMailBox_Max, CAN_OS_TxMailBox_Max, NULL);
@@ -30,12 +31,12 @@ int CAN_OS_Start(CAN_OS_HandlerStruct* CANHandler)
 	return HAL_CAN_Start(CANHandler->hcan);
 }
 
-int CAN_OS_Transmit(CAN_OS_HandlerStruct* CANHandler, const CAN_TxHeaderTypeDef txHeader, uint8_t* txData, uint32_t* txMailbox, uint32_t timeout)
+int CAN_OS_Transmit(CAN_OS_HandlerStruct* CANHandler, const CAN_TxHeaderTypeDef *txHeader, uint8_t* txData, uint32_t* txMailbox, uint32_t timeout)
 {
 	int Status;
 	Status = osSemaphoreAcquire(CANHandler->TxSemaphore, timeout);
 	if(Status == osErrorTimeout) return HAL_TIMEOUT;
-	Status = HAL_CAN_AddTxMessage(CANHandler->hcan, &txHeader, txData, txMailbox);
+	Status = HAL_CAN_AddTxMessage(CANHandler->hcan, txHeader, txData, txMailbox);
 	if (Status != HAL_OK){
 		osSemaphoreRelease(CANHandler->TxSemaphore);
 	}
@@ -66,16 +67,20 @@ void CAN_OS_TxCplt_CB(CAN_OS_HandlerStruct* CANHandler)
 {
 	osSemaphoreRelease(CANHandler->TxSemaphore);
 }
-void CAN_OS_RegisterCB(CAN_HandleTypeDef *hcan, void (* pTxCallback)(CAN_HandleTypeDef *_hcan),
+void CAN_OS_RegisterCB(CAN_OS_HandlerStruct *hcan, void (* pTxCallback)(CAN_HandleTypeDef *_hcan),
 												void (* pRxCallback)(CAN_HandleTypeDef *_hcan))
 {
-	HAL_CAN_RegisterCallback(hcan, HAL_CAN_TX_MAILBOX0_COMPLETE_CB_ID,pTxCallback);
-	HAL_CAN_RegisterCallback(hcan, HAL_CAN_TX_MAILBOX1_COMPLETE_CB_ID,pTxCallback);
-	HAL_CAN_RegisterCallback(hcan, HAL_CAN_TX_MAILBOX2_COMPLETE_CB_ID,pTxCallback);
-	HAL_CAN_RegisterCallback(hcan, HAL_CAN_TX_MAILBOX0_ABORT_CB_ID,pTxCallback);
-	HAL_CAN_RegisterCallback(hcan, HAL_CAN_TX_MAILBOX1_ABORT_CB_ID,pTxCallback);
-	HAL_CAN_RegisterCallback(hcan, HAL_CAN_TX_MAILBOX2_ABORT_CB_ID,pTxCallback);
+	CAN_OS_ActivateNotification(hcan, CAN_IT_TX_MAILBOX_EMPTY);
+	CAN_OS_ActivateNotification(hcan, CAN_IT_RX_FIFO0_MSG_PENDING);
+	CAN_OS_ActivateNotification(hcan, CAN_IT_RX_FIFO1_MSG_PENDING);
 
-	HAL_CAN_RegisterCallback(hcan,HAL_CAN_RX_FIFO0_MSG_PENDING_CB_ID,pRxCallback);
-	HAL_CAN_RegisterCallback(hcan,HAL_CAN_RX_FIFO1_MSG_PENDING_CB_ID,pRxCallback);
+	HAL_CAN_RegisterCallback(hcan->hcan, HAL_CAN_TX_MAILBOX0_COMPLETE_CB_ID,pTxCallback);
+	HAL_CAN_RegisterCallback(hcan->hcan, HAL_CAN_TX_MAILBOX1_COMPLETE_CB_ID,pTxCallback);
+	HAL_CAN_RegisterCallback(hcan->hcan, HAL_CAN_TX_MAILBOX2_COMPLETE_CB_ID,pTxCallback);
+	HAL_CAN_RegisterCallback(hcan->hcan, HAL_CAN_TX_MAILBOX0_ABORT_CB_ID,pTxCallback);
+	HAL_CAN_RegisterCallback(hcan->hcan, HAL_CAN_TX_MAILBOX1_ABORT_CB_ID,pTxCallback);
+	HAL_CAN_RegisterCallback(hcan->hcan, HAL_CAN_TX_MAILBOX2_ABORT_CB_ID,pTxCallback);
+
+	HAL_CAN_RegisterCallback(hcan->hcan,HAL_CAN_RX_FIFO0_MSG_PENDING_CB_ID,pRxCallback);
+	HAL_CAN_RegisterCallback(hcan->hcan,HAL_CAN_RX_FIFO1_MSG_PENDING_CB_ID,pRxCallback);
 }

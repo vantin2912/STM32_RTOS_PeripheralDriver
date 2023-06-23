@@ -28,13 +28,13 @@ int CAN_OS_ActivateNotification(CAN_OS_HandlerStruct* CANHandler, uint32_t Activ
 int CAN_OS_ConfigFilter(CAN_OS_HandlerStruct* CANHandler,const CAN_FilterTypeDef* Filter);
 int CAN_OS_Start(CAN_OS_HandlerStruct* CANHandler);
 
-int CAN_OS_Transmit(CAN_OS_HandlerStruct* CANHandler, const CAN_TxHeaderTypeDef txHeader, uint8_t* txData, uint32_t* txMailbox, uint32_t timeout);
+int CAN_OS_Transmit(CAN_OS_HandlerStruct* CANHandler, const CAN_TxHeaderTypeDef *txHeader, uint8_t* txData, uint32_t* txMailbox, uint32_t timeout);
 int CAN_OS_Receive(CAN_OS_HandlerStruct* CANHandler, uint32_t rxFifo, CAN_RxHeaderTypeDef* rxHeader, uint8_t* rxData, uint32_t timeout);
 
 void CAN_OS_TxCplt_CB(CAN_OS_HandlerStruct* CANHandler);
 void CAN_OS_RxCplt_CB(CAN_OS_HandlerStruct* CANHandler);
 
-void CAN_OS_RegisterCB(CAN_HandleTypeDef *hcan, void (* pTxCallback)(CAN_HandleTypeDef *_hcan),
+void CAN_OS_RegisterCB(CAN_OS_HandlerStruct *hcan, void (* pTxCallback)(CAN_HandleTypeDef *_hcan),
 												void (* pRxCallback)(CAN_HandleTypeDef *_hcan));
 
 #endif /* CANHANDLER_CANHANDLER_H_ */
