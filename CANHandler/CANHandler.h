@@ -10,11 +10,11 @@
 
 #include "main.h"
 #include "cmsis_os.h"
-#define CAN_OS_TxMailBox_Max		3
+#define CAN_OS_TxMailBox_Max		3UL
 
-#define CAN_OS_ActivateTxCB_ID		1
-#define CAN_OS_ActivateRxFifo0_ID	2
-#define CAN_OS_ActivateRxFifo1_ID	3
+#define CAN_OS_ActivateTxCB_ID		0UL
+#define CAN_OS_ActivateRxFifo0_ID	1UL
+#define CAN_OS_ActivateRxFifo1_ID	2UL
 
 #define CAN_OS_RxFifo0Cplt_Event			0x01
 #define CAN_OS_RxFifo1Cplt_Event			0x02
