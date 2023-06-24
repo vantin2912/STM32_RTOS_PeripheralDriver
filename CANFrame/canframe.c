@@ -1,199 +1,182 @@
-#include <CANFrame/canframe.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
+#include <CANFrame/CANFrame.h>
 #include <string.h>
-#include "stm32f1xx_hal_can.h"
-//extern CAN_HandleTypeDef hcan;
-extern UART_HandleTypeDef huart1;
-uint8_t CAN_Init(CAN_HandlerStruct* canhandler, CAN_HandleTypeDef* hcan, uint16_t ID)
+
+int CANFrame_Init(CANFrame_HandlerStruct* canhandler, CAN_OS_HandlerStruct* CAN, uint16_t senderID)
 {
-	canhandler->hcan = hcan;
-	canhandler->SenderID = ID;
-	canhandler->fillterbank = 0;
-	return HAL_OK;
+	canhandler->CAN = CAN;
+	canhandler->SenderID = senderID;
+	canhandler->usedFilterBank = 0;
+	return osOK;
 }
-uint8_t CAN_Send_Dataframe(CAN_HandlerStruct* canhandler,CANConfigIDTxtypedef* pIDtype, uint8_t *Data, uint32_t Datalength)
+int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* CANFrame_txHeader,
+							uint8_t *Data , uint32_t timeout)
 {
-	CAN_TxHeaderTypeDef Txheader;
+	int Status;
+
+	CAN_TxHeaderTypeDef CAN_TxHeader;
 	/*Config Frame----------------------------------------------------------------*/
-	Txheader.DLC=8;
-	Txheader.RTR=CAN_RTR_DATA;
-	Txheader.IDE=CAN_ID_STD;
+	CAN_TxHeader.DLC=8;
+	CAN_TxHeader.RTR=CAN_RTR_DATA;
+	CAN_TxHeader.IDE=CAN_ID_STD;
 	/*Config ID-------------------------------------------------------------------*/
 	uint32_t Txmailbox;
-	uint16_t ID_NUM = 0x00;
-	uint8_t Message_ID = pIDtype->MessageType;
-	uint8_t Target_ID=pIDtype->TargetNode;
-	uint8_t Frame_type=FIRST_FRAME;
-	ID_NUM |= Message_ID;
-	ID_NUM =(ID_NUM <<4)|Target_ID;
+	uint16_t ID_NUM = (CANFrame_txHeader->MessageType <<7) | CANFrame_txHeader->TargetNode << 3;
+	uint8_t Frame_type = CANFRAME_FRAMETYPE_FIRST;
+
 	/*Implement send data----------------------------------------------------------*/
-	uint8_t* frame = (uint8_t*)malloc(CAN_MAX_DATA_LENGTH);
-	uint32_t frameIndex = 0;
-	uint32_t length = Datalength;
-	int isFirstFrame = 1;
-	int isLastFrame=0;
-	//uint32_t startTime = HAL_GetTick();
-	/*Add SenderID vs Data length at first frame-----------------------------------*/
-	for (int i = 0; i < Datalength; i++)
+	uint8_t TxFrame[CANFRAME_MAX_DATA_LENGTH] = {0};
+	uint32_t FrameIndex = 0;
+	uint32_t DataLength = CANFrame_txHeader->DataLen;
+	uint8_t isFirstFrame = 1;
+	uint8_t isLastFrame=0;
+	uint32_t startTime = osKernelGetTickCount();
+	uint32_t waitTime;
+	/*Add SenderID vs Data length at first frame -----------------------------------*/
+	for (int i = 0; i < DataLength; i++)
 	{
 		uint8_t byte = Data[i];
 		if (isFirstFrame)
 		{
-			frame[frameIndex] = pIDtype->SenderID;
-			frameIndex++;
-			frame[frameIndex] = length;
-			frameIndex++;
+			TxFrame[FrameIndex] = DataLength;
+			FrameIndex++;
+			TxFrame[FrameIndex] = DataLength;
+			FrameIndex++;
 			isFirstFrame = 0;
 		}
 		/*Add byte into frame data----------------------------------------------------*/
-		frame[frameIndex] = byte;
-		frameIndex++;
+		TxFrame[FrameIndex] = byte;
+		FrameIndex++;
 		/*Check if frame data is not fill, add FILL byte until frame full 8bytes------*/
-		if (frameIndex == CAN_MAX_DATA_LENGTH || i == Datalength - 1)
+		if (FrameIndex == CANFRAME_MAX_DATA_LENGTH || i == DataLength - 1)
 		{
-			while (frameIndex < CAN_MAX_DATA_LENGTH)
+			while (FrameIndex < CANFRAME_MAX_DATA_LENGTH)
 			{
-				frame[frameIndex] = FILL_VALUE;
-				frameIndex++;
+				TxFrame[FrameIndex] = CANFRAME_FILL_VALUE;
+				FrameIndex++;
 			}
 			/*Check last frame------------------------------------------------------*/
-			if(i == Datalength - 1)
+			if(i == DataLength - 1)
 			{
 				isLastFrame=1;
-				ID_NUM=(ID_NUM <<3)|END_FRAME;
+				CAN_TxHeader.StdId = ID_NUM | CANFRAME_FRAMETYPE_END;
 			}
 			if(isLastFrame==0){
-				ID_NUM =(ID_NUM <<3)|Frame_type;
+				CAN_TxHeader.StdId =ID_NUM | Frame_type;
 			}
-			Txheader.StdId=ID_NUM;
 			/*send data--------------------------------------------------------------------*/
-			if(HAL_CAN_AddTxMessage(canhandler->hcan,&Txheader,frame,&Txmailbox)!=HAL_OK)
+			SyncPrintf("Transmit ID 0x%.2x: ", CAN_TxHeader.StdId);
+			for(uint8_t i = 0; i<8; i++)
 			{
-				Error_Handler();
+				SyncPrintf("%d ", TxFrame[i]);
 			}
-			/*Check if a transmission request is pending on the selected TxMailboxes------*/
-			while(HAL_CAN_IsTxMessagePending(canhandler->hcan,Txmailbox))
-				/*Decrease data frame and set frame turn 0 again------------------------------*/
-			memset(frame, 0, CAN_MAX_DATA_LENGTH);
-			frameIndex = 0;
+
+			waitTime = timeout - (osKernelGetTickCount() - startTime);
+			Status = CAN_OS_Transmit(canhandler->CAN, &CAN_TxHeader, TxFrame, &Txmailbox, waitTime);
+			SyncPrintf("Mail box %d\r\n", (uint16_t)Txmailbox);
+			if(Status != osOK)
+			{
+				return Status;
+			}
+			memset(TxFrame, 0, CANFRAME_MAX_DATA_LENGTH);
+			FrameIndex = 0;
 			/*add SenderID for every 1st next frame---------------------------------------*/
-			frame[0] = pIDtype->SenderID;
-			frameIndex++;
-			ID_NUM=ID_NUM>>3;
+			TxFrame[0] = canhandler -> SenderID;
+			FrameIndex++;
 			Frame_type++;
 		}
 	}
-	free(frame);
-	return HAL_OK;
+	return osOK;
 }
-/*uint8_t CAN_Receive_Dataframe(CAN_RxHeaderTypeDef *RxHeader, uint8_t *Data)
-{
-		while(! HAL_CAN_GetRxFifoFillLevel(&hcan,CAN_RX_FIFO0))
 
-    if (HAL_CAN_GetRxMessage(&hcan, CAN_RX_FIFO0, RxHeader, Data) != HAL_OK)
-    {
-        Error_Handler();
-        return 0;
-    }
-    return 1;
-}*/
-/*CAN Receive Data---------------------------------------------------------------------------------------------------------------------------------*/
-//uint32_t addArrayToBuffer(uint8_t* buffer, uint8_t* array, int size, int* bufferIndex) {
-//    for (int i = 0; i < size; i++) {
-//        buffer[*bufferIndex] = array[i];
-//        (*bufferIndex)++;
-//    }
+
+//int CANFrame_WaitMsg(CANFrame_HandlerStruct* canhandler, CANFrame_RxHeaderTypedef* pIDtype,uint8_t *ReceiveData, uint32_t *ReceiveLength)
+//{
+//	CAN_RxHeaderTypeDef RxHeader;
+//	uint8_t frame[CAN_MAX_DATA_LENGTH] = {0};
+//	uint8_t isLastFrame = 0;
+//	uint8_t SenderId=0;
+//	uint8_t LengthRecData=0;
+//	CANConfigIDRxtypedef *Rec= (CANConfigIDRxtypedef*) malloc(CAN_MAX_DATA_LENGTH);
+//	for (int i=0; i< 13; i++)
+//	{
+//		Rec[i].Index=0;
+//		Rec[i].ExpectedLength=0;
+//		Rec[i].frameIndex=0;
+//	}
+//		while(!isLastFrame){
+//			while (HAL_CAN_GetRxFifoFillLevel(canhandler->hcan, CAN_RX_FIFO0) == 0);
+//			if (HAL_CAN_GetRxMessage(canhandler->hcan, CAN_RX_FIFO0, &RxHeader, frame) != HAL_OK)
+//			{
+//				Error_Handler();
+//			}
+//			SenderId=frame[0];
+//			uint16_t ID_NUM = RxHeader.StdId;
+//			pIDtype -> Frametype = ID_NUM & 0x07;
+//			pIDtype -> TargetNode = (ID_NUM >> 3) & 0x0F;
+//			pIDtype ->  MessageType= (ID_NUM >> 7) & 0x0F;
+//			switch (pIDtype->Frametype) {
+//			  case FIRST_FRAME:
+//			    Rec[SenderId].ExpectedLength = frame[1];
+//			    Rec[SenderId].frameIndex = 2;
+//			    break;
+//			  case END_FRAME:
+//			    Rec[SenderId].frameIndex = 1;
+//			    isLastFrame = 1;
+//			    break;
+//			  default:
+//			    Rec[SenderId].frameIndex = 1;
+//			    break;
+//			}
+//			for(;Rec[SenderId].frameIndex<CAN_MAX_DATA_LENGTH;Rec[SenderId].frameIndex++){
+//				Rec[SenderId].ReceivedBuffer[Rec[SenderId].Index]=frame[Rec[SenderId].frameIndex];
+//				Rec[SenderId].Index++;
+//			}
+//		}
+//	*ReceiveLength=Rec[SenderId].ExpectedLength;
+//	memcpy(ReceiveData,Rec[SenderId].ReceivedBuffer,Rec[SenderId].ExpectedLength);
+//	memset(Rec[SenderId].ReceivedBuffer,0,Rec[SenderId].ExpectedLength);
+//	Rec[SenderId].Index=0;
+//	free(Rec);
+//	return HAL_OK;
 //}
-uint8_t CAN_Receive_Dataframe(CAN_HandlerStruct* canhandler,CANConfigIDRxtypedef* pIDtype,uint8_t *ReceiveData, uint32_t *ReceiveLength)
-{
-	CAN_RxHeaderTypeDef RxHeader;
-	uint8_t frame[CAN_MAX_DATA_LENGTH] = {0};
-	uint8_t isLastFrame = 0;
-	uint8_t SenderId=0;
-	uint8_t LengthRecData=0;
-	CANConfigIDRxtypedef *Rec=(CANConfigIDRxtypedef*)malloc(CAN_MAX_DATA_LENGTH);
-	for (int i=0; i< 13; i++)
-	{
-		Rec[i].Index=0;
-		Rec[i].ExpectedLength=0;
-		Rec[i].frameIndex=0;
-	}
-		while(!isLastFrame){
-			while (HAL_CAN_GetRxFifoFillLevel(canhandler->hcan, CAN_RX_FIFO0) == 0);
-			if (HAL_CAN_GetRxMessage(canhandler->hcan, CAN_RX_FIFO0, &RxHeader, frame) != HAL_OK)
-			{
-				Error_Handler();
-			}
-			SenderId=frame[0];
-			uint16_t ID_NUM = RxHeader.StdId;
-			pIDtype -> Frametype = ID_NUM & 0x07;
-			pIDtype -> TargetNode = (ID_NUM >> 3) & 0x0F;
-			pIDtype ->  MessageType= (ID_NUM >> 7) & 0x0F;
-			switch (pIDtype->Frametype) {
-			  case FIRST_FRAME:
-			    Rec[SenderId].ExpectedLength = frame[1];
-			    Rec[SenderId].frameIndex = 2;
-			    break;
-			  case END_FRAME:
-			    Rec[SenderId].frameIndex = 1;
-			    isLastFrame = 1;
-			    break;
-			  default:
-			    Rec[SenderId].frameIndex = 1;
-			    break;
-			}
-			for(;Rec[SenderId].frameIndex<CAN_MAX_DATA_LENGTH;Rec[SenderId].frameIndex++){
-				Rec[SenderId].ReceivedBuffer[Rec[SenderId].Index]=frame[Rec[SenderId].frameIndex];
-				Rec[SenderId].Index++;
-			}
-		}
-	*ReceiveLength=Rec[SenderId].ExpectedLength;
-	memcpy(ReceiveData,Rec[SenderId].ReceivedBuffer,Rec[SenderId].ExpectedLength);
-	memset(Rec[SenderId].ReceivedBuffer,0,Rec[SenderId].ExpectedLength);
-	Rec[SenderId].Index=0;
-	free(Rec);
-	return HAL_OK;
-}
-uint8_t CAN_Send_Request(CAN_HandlerStruct* canhandler,uint8_t Data)
+
+int CAN_Send_Request(CANFrame_HandlerStruct* canhandler,uint8_t* Data)
 {
 	uint32_t Txmailbox;
 	CAN_TxHeaderTypeDef Txheader;
 	Txheader.DLC=1;
 	Txheader.RTR=CAN_RTR_DATA;
 	Txheader.IDE=CAN_ID_STD;
-	Txheader.StdId=TEST_FRAME;
-	if(HAL_CAN_AddTxMessage(canhandler->hcan,&Txheader,&Data,&Txmailbox)!=HAL_OK)
-	{
-		Error_Handler();
-	}
-	while(HAL_CAN_IsTxMessagePending(canhandler->hcan,Txmailbox));
-	return 0;
+	Txheader.StdId=CANFRAME_MSGTYPE_TEST_FRAME;
+	return CAN_OS_Transmit(canhandler->CAN, &Txheader, Data, &Txmailbox, 20);
+
 }
-uint16_t CAN_RECEIVE_ACK(CAN_HandlerStruct* canhandler)
-{
-	CAN_RxHeaderTypeDef Rxheader;
-	uint8_t frame=0;
-	uint8_t ack=0;
-	while (HAL_CAN_GetRxFifoFillLevel(canhandler->hcan, CAN_RX_FIFO0) == 0)
-		if (HAL_CAN_GetRxMessage(canhandler->hcan, CAN_RX_FIFO0, &Rxheader, frame) != HAL_OK)
-		{
-			Error_Handler();
-		}
-	if(Rxheader.StdId==TEST_FRAME&&frame==1){
-		return HAL_ERROR;
-	}else if(Rxheader.StdId==TEST_FRAME&&frame==0)
-	{
-		return HAL_OK;
-	}
-}
-uint32_t CAN_Config_filtering(CAN_HandlerStruct *Can, uint16_t NodeID)
+
+//uint16_t CAN_RECEIVE_ACK(CANFrame_HandlerStruct* canhandler)
+//{
+//	CAN_RxHeaderTypeDef Rxheader;
+//	uint8_t frame=0;
+//	uint8_t ack=0;
+//	while (HAL_CAN_GetRxFifoFillLevel(canhandler->hcan, CAN_RX_FIFO0) == 0)
+//	if (HAL_CAN_GetRxMessage(canhandler->hcan, CAN_RX_FIFO0, &Rxheader, frame) != HAL_OK)
+//	{
+//		Error_Handler();
+//	}
+//	if(Rxheader.StdId==TEST_FRAME&&frame==1){
+//		return HAL_ERROR;
+//	}else if(Rxheader.StdId==TEST_FRAME&&frame==0)
+//	{
+//		return HAL_OK;
+//	}
+//}
+
+
+int CANFrame_FilterConfig(CANFrame_HandlerStruct *Can, uint16_t NodeID)
 {
 	CAN_FilterTypeDef Can_filter_init;
 	Can_filter_init.FilterActivation=ENABLE;
-	Can_filter_init.FilterBank=Can->fillterbank++;
-	if(Can->fillterbank > 14){
+	Can_filter_init.FilterBank= Can->usedFilterBank;
+	if(Can->usedFilterBank > 14){
 		Error_Handler();
 	}
 	Can_filter_init.FilterFIFOAssignment=CAN_RX_FIFO0;
@@ -203,7 +186,7 @@ uint32_t CAN_Config_filtering(CAN_HandlerStruct *Can, uint16_t NodeID)
 	Can_filter_init.FilterMaskIdLow= 0x0000;
 	Can_filter_init.FilterMode=CAN_FILTERMODE_IDMASK;
 	Can_filter_init.FilterScale=CAN_FILTERSCALE_32BIT;
-	if(HAL_CAN_ConfigFilter(Can->hcan,&Can_filter_init)!=HAL_OK)
+	if(CAN_OS_ConfigFilter(Can->CAN,&Can_filter_init)!=HAL_OK)
 	{
 		Error_Handler();
 	}

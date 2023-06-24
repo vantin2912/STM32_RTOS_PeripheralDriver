@@ -13,7 +13,8 @@ int CAN_OS_Init(CAN_OS_HandlerStruct* CANHandler, CAN_HandleTypeDef* hcan)
 
 int CAN_OS_ConfigFilter(CAN_OS_HandlerStruct* CANHandler,const CAN_FilterTypeDef* Filter)
 {
-	return HAL_CAN_ConfigFilter(CANHandler->hcan, Filter);
+	HAL_StatusTypeDef Status =  HAL_CAN_ConfigFilter(CANHandler->hcan, Filter);
+	return Status == HAL_OK? osOK: osError;
 }
 
 int CAN_OS_ActivateNotification(CAN_OS_HandlerStruct* CANHandler, uint32_t ActiveITs)
