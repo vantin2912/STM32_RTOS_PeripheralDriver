@@ -1,12 +1,13 @@
 #include <CANFrame/CANFrame.h>
 #include <string.h>
 
-int CANFrame_Init(CANFrame_HandlerStruct* canhandler, CAN_OS_HandlerStruct* CAN, uint16_t senderID)
+int CANFrame_Init(CANFrame_HandlerStruct* canhandler, CAN_OS_HandlerStruct* CAN, uint16_t nodeID, uint32_t CAN_RxFifo)
 {
 	canhandler->CAN = CAN;
-	canhandler->SenderID = senderID;
+	canhandler->SenderID = nodeID;
 	canhandler->usedFilterBank = 0;
-	return osOK;
+	return CANFrame_FilterConfig(canhandler, nodeID, CAN_RxFifo);
+
 }
 int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* CANFrame_txHeader,
 							uint8_t *Data , uint32_t timeout)
@@ -171,15 +172,15 @@ int CAN_Send_Request(CANFrame_HandlerStruct* canhandler,uint8_t* Data)
 //}
 
 
-int CANFrame_FilterConfig(CANFrame_HandlerStruct *Can, uint16_t NodeID)
+int CANFrame_FilterConfig(CANFrame_HandlerStruct *Can, uint16_t NodeID, uint32_t RxFifo)
 {
 	CAN_FilterTypeDef Can_filter_init;
 	Can_filter_init.FilterActivation=ENABLE;
-	Can_filter_init.FilterBank= Can->usedFilterBank;
+	Can_filter_init.FilterBank= Can->usedFilterBank++;
 	if(Can->usedFilterBank > 14){
 		Error_Handler();
 	}
-	Can_filter_init.FilterFIFOAssignment=CAN_RX_FIFO0;
+	Can_filter_init.FilterFIFOAssignment=RxFifo;
 	Can_filter_init.FilterIdHigh=NodeID<<8;
 	Can_filter_init.FilterIdLow= 0x0000;
 	Can_filter_init.FilterMaskIdHigh= 0x0F00;
@@ -190,5 +191,5 @@ int CANFrame_FilterConfig(CANFrame_HandlerStruct *Can, uint16_t NodeID)
 	{
 		Error_Handler();
 	}
-	return HAL_OK;
+	return osOK;
 }

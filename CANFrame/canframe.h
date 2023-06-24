@@ -62,8 +62,8 @@ typedef struct {
 	uint16_t DataLen;
 }CANFrame_TxHeaderTypedef;
 
-int CANFrame_Init(CANFrame_HandlerStruct* canhandler, CAN_OS_HandlerStruct* CAN, uint16_t senderID);
-int CANFrame_FilterConfig(CANFrame_HandlerStruct *Canhandle, uint16_t NodeID);
+int CANFrame_Init(CANFrame_HandlerStruct* canhandler, CAN_OS_HandlerStruct* CAN, uint16_t nodeID, uint32_t CAN_RxFifo);
+int CANFrame_FilterConfig(CANFrame_HandlerStruct *Canhandle, uint16_t NodeID, uint32_t RxFifo);
 
 
 int CANFrame_WaitMsg(CANFrame_HandlerStruct* Canhandle,CANFrame_RxHeaderTypedef* pIDtype,uint8_t *ReceiveData, uint32_t *ReceiveLength);
