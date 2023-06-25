@@ -1,11 +1,135 @@
 #include <CANFrame/CANFrame.h>
 #include <string.h>
 
+
+#define CANFRAME_GETMSGTYPE_FROMID(CANID)			((CANID>> 7) 	& 0xff)
+#define CANFRAME_GETTARGETNODE_FROMID(CANID)	((CANID>> 3) 	& 0xff)
+#define CANFRAME_GETFRAMETYPE_FROMID(CANID)		((CANID)		& 0xff)
+
+
+const osThreadAttr_t CANRcvTask_attributes = {
+  .name = "CANRcvHandler",
+  .stack_size = 200 * 4,
+  .priority = (osPriority_t) osPriorityNormal3,
+};
+
+static inline void CANFrame_ClearRcvInfo(CANFrame_RcvInfoTypedef* rcvinfo)
+{
+	memset(rcvinfo, 0,sizeof( CANFrame_RcvInfoTypedef));
+}
+
+static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CANHandler, CAN_RxHeaderTypeDef* RxHeader, uint8_t* RxData)
+{
+	uint8_t senderID = RxData[0];
+	CANFrame_RcvInfoTypedef* RcvInfo = &CANHandler->_RxRcvInfo[senderID];
+	uint8_t CpyLen;
+	uint8_t RcvFrameType = CANFRAME_GETFRAMETYPE_FROMID(RxHeader->StdId);
+	uint8_t MsgType =	CANFRAME_GETMSGTYPE_FROMID(RxHeader->StdId);
+	uint8_t CurrentFrameType = RcvInfo->CurrentFrameType;
+	if(CurrentFrameType == 0)
+	{
+		// Empty buffer not receive any frame
+		RcvInfo->ExpectedLen = RxData[1];
+		RcvInfo->MsgType = MsgType;
+		RcvInfo->CurrentFrameType = RcvFrameType;
+		switch (RcvFrameType) {
+			case CANFRAME_FRAMETYPE_FIRST:
+				CpyLen = 6;
+				memcpy(RcvInfo->Data + RcvInfo->ReceivedLen, RxData + 2, CpyLen);
+				RcvInfo->ReceivedLen += CpyLen;
+				return NULL;
+			case CANFRAME_FRAMETYPE_END:
+				CpyLen = RcvInfo->ExpectedLen;
+				memcpy(RcvInfo->Data + RcvInfo->ReceivedLen, RxData + 2, CpyLen);
+				RcvInfo->ReceivedLen += CpyLen;
+				return RcvInfo;
+			default:
+				CpyLen = 0;
+				break;
+		}
+
+		return NULL;
+
+	} else
+	{
+		if (RcvFrameType != CurrentFrameType + 1 || RcvInfo->MsgType != MsgType)
+		{
+			CANFrame_ClearRcvInfo(RcvInfo);
+			return NULL;
+		}
+		else if(RcvFrameType == CANFRAME_FRAMETYPE_END)
+		{
+			CpyLen = 7;
+			memcpy(RcvInfo->Data + RcvInfo->ReceivedLen, RxData + 1, CpyLen);
+			RcvInfo->ReceivedLen += CpyLen;
+			if(RcvInfo->ExpectedLen == RcvInfo->ReceivedLen)
+			{
+				return RcvInfo;
+			}
+			else
+			{
+				CANFrame_ClearRcvInfo(RcvInfo);
+				return NULL;
+			}
+		}
+		else
+		{
+			RcvInfo->CurrentFrameType = RcvFrameType;
+			CpyLen = 7;
+			memcpy(RcvInfo->Data + RcvInfo->ReceivedLen, RxData + 1, CpyLen);
+			RcvInfo->ReceivedLen += CpyLen;
+			return NULL;
+		}
+	}
+
+
+
+}
+
+void CANFrame_RcvTask(void* arg)
+{
+	int Status;
+	CANFrame_HandlerStruct* CANHandler = (CANFrame_HandlerStruct*) arg;
+	CAN_RxHeaderTypeDef CAN_RxHeader;
+	CANFrame_RxHeaderTypedef CANFrame_RxHeader;
+	uint8_t RxData[8];
+	uint8_t senderID;
+	uint8_t TargetNode;
+	while(1)
+	{
+		Status = CAN_OS_ListenMsg(CANHandler->CAN, CANHandler->RxFifo, &CAN_RxHeader, RxData, osWaitForever);
+//		if(CAN_RxHeader->)
+		if(Status != osOK)
+		{
+			SyncPrintf("Listen Failed %d \r\n", Status);
+			continue;
+		}
+		TargetNode = CANFRAME_GETTARGETNODE_FROMID(CAN_RxHeader.StdId);
+		if((TargetNode != CANHandler->nodeID) || (TargetNode != CANFRAME_ALL_NODE))
+		{
+			SyncPrintf("Receive Wrong Target = %d \r\n", TargetNode);
+			continue;
+		}
+		senderID = RxData[0];
+		CANFrame_RcvInfoTypedef* rcvInfo = CANFrame_ProcessData(CANHandler, &CAN_RxHeader, RxData);
+		if(rcvInfo != NULL)
+		{
+			CANFrame_RxHeader.DataLen = rcvInfo->ExpectedLen;
+			CANFrame_RxHeader.MessageType = rcvInfo->MsgType;
+			CANFrame_RxHeader.senderID = senderID;
+		}
+		CANHandler->ReceiveDataCB(CANHandler->ReceiveDataCB_arg, &CANFrame_RxHeader, rcvInfo->Data);
+	}
+}
+
 int CANFrame_Init(CANFrame_HandlerStruct* canhandler, CAN_OS_HandlerStruct* CAN, uint16_t nodeID, uint32_t CAN_RxFifo)
 {
+	memset(canhandler, 0, sizeof(CANFrame_HandlerStruct));
 	canhandler->CAN = CAN;
-	canhandler->SenderID = nodeID;
+	canhandler->nodeID = nodeID;
 	canhandler->usedFilterBank = 0;
+	canhandler->RxFifo = CAN_RxFifo;
+	canhandler->rcvHandler_Th = osThreadNew(CANFrame_RcvTask, canhandler, &CANRcvTask_attributes);
 	return CANFrame_FilterConfig(canhandler, nodeID, CAN_RxFifo);
 
 }
@@ -32,13 +156,13 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 	uint8_t isLastFrame=0;
 	uint32_t startTime = osKernelGetTickCount();
 	uint32_t waitTime;
-	/*Add SenderID vs Data length at first frame -----------------------------------*/
+	/*Add nodeID vs Data length at first frame -----------------------------------*/
 	for (int i = 0; i < DataLength; i++)
 	{
 		uint8_t byte = Data[i];
 		if (isFirstFrame)
 		{
-			TxFrame[FrameIndex] = DataLength;
+			TxFrame[FrameIndex] = canhandler->nodeID;
 			FrameIndex++;
 			TxFrame[FrameIndex] = DataLength;
 			FrameIndex++;
@@ -64,7 +188,7 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 			if(isLastFrame==0){
 				CAN_TxHeader.StdId =ID_NUM | Frame_type;
 			}
-			/*send data--------------------------------------------------------------------*/
+			/*---------send data-----------------------------------------------------------*/
 			SyncPrintf("Transmit ID 0x%.2x: ", CAN_TxHeader.StdId);
 			for(uint8_t i = 0; i<8; i++)
 			{
@@ -81,14 +205,27 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 			memset(TxFrame, 0, CANFRAME_MAX_DATA_LENGTH);
 			FrameIndex = 0;
 			/*add SenderID for every 1st next frame---------------------------------------*/
-			TxFrame[0] = canhandler -> SenderID;
+			TxFrame[0] = canhandler -> nodeID;
 			FrameIndex++;
 			Frame_type++;
 		}
 	}
 	return osOK;
 }
+int CANFrame_RegCB(CANFrame_HandlerStruct* CANHandler, uint8_t CallbackID,
+					void (*Func)(void*, CANFrame_RxHeaderTypedef*, uint8_t*), void* arg)
+{
+	switch (CallbackID) {
+		case CANFRAME_RCVCPLT_CB_ID:
+			CANHandler->ReceiveDataCB = Func;
+			CANHandler->ReceiveDataCB_arg = arg;
+			return HAL_OK;
+		default:
+			return osErrorParameter;
 
+	}
+
+}
 
 //int CANFrame_WaitMsg(CANFrame_HandlerStruct* canhandler, CANFrame_RxHeaderTypedef* pIDtype,uint8_t *ReceiveData, uint32_t *ReceiveLength)
 //{
