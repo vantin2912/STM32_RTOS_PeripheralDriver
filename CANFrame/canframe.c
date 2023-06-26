@@ -26,7 +26,7 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 	uint8_t RcvFrameType = CANFRAME_GETFRAMETYPE_FROMID(RxHeader->StdId);
 	uint8_t MsgType =	CANFRAME_GETMSGTYPE_FROMID(RxHeader->StdId);
 	uint8_t CurrentFrameType = RcvInfo->CurrentFrameType;
-//	SyncPrintf("Rcv Frame Type %d CurrentFrameType %d \r\n", RcvFrameType, CurrentFrameType);
+	SyncPrintf("Rcv Frame Type %d CurrentFrameType %d \r\n", RcvFrameType, CurrentFrameType);
 
 	if(CurrentFrameType == 0)
 	{
@@ -56,7 +56,10 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 		return NULL;
 	} else
 	{
-
+		if(RcvInfo->MsgType != MsgType)
+		{
+			CANFrame_ClearRcvInfo(RcvInfo);
+		}
 		if(RcvFrameType == CANFRAME_FRAMETYPE_END)
 		{
 //			SyncPrintf("Frame Type END\r\n");
@@ -143,10 +146,14 @@ void CANFrame_RcvTask(void* arg)
 				SyncPrintf("%d ", rcvInfo->Data[i]);
 			}
 			SyncPrintf("\r\n");
+<<<<<<< HEAD
 			if(CANHandler->ReceiveDataCB != NULL)
 			{
 				CANHandler->ReceiveDataCB(CANHandler->ReceiveDataCB_arg, &CANFrame_RxHeader, rcvInfo->Data);
 			}
+=======
+//			CANHandler->ReceiveDataCB(CANHandler->ReceiveDataCB_arg, &CANFrame_RxHeader, rcvInfo->Data);
+>>>>>>> 137ce9eafa54024def7991a16ca33a4377e5e4a0
 			CANFrame_ClearRcvInfo(rcvInfo);
 		}
 	}
@@ -225,15 +232,16 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 				CAN_TxHeader.StdId =ID_NUM | Frame_type;
 			}
 			/*---------send data-----------------------------------------------------------*/
-			SyncPrintf("Transmit ID 0x%.2x: ", CAN_TxHeader.StdId);
-			for(uint8_t i = 0; i<8; i++)
-			{
-				SyncPrintf("%d ", TxFrame[i]);
-			}
-
+//			SyncPrintf("Transmit ID 0x%.2x: ", CAN_TxHeader.StdId);
+//			for(uint8_t i = 0; i<8; i++)
+//			{
+//				SyncPrintf("%d ", TxFrame[i]);
+//			}
+//			osDelay(1);
 			waitTime = timeout - (osKernelGetTickCount() - startTime);
+
 			Status = CAN_OS_Transmit(canhandler->CAN, &CAN_TxHeader, TxFrame, &Txmailbox, waitTime);
-			SyncPrintf("Mail box %d\r\n", (uint16_t)Txmailbox);
+//			SyncPrintf("Mail box %d\r\n", (uint16_t)Txmailbox);
 			if(Status != osOK)
 			{
 				return Status;
