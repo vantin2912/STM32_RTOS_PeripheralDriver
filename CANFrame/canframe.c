@@ -27,10 +27,7 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 	uint8_t MsgType =	CANFRAME_GETMSGTYPE_FROMID(RxHeader->StdId);
 	uint8_t CurrentFrameType = RcvInfo->CurrentFrameType;
 	SyncPrintf("Rcv Frame Type %d CurrentFrameType %d \r\n", RcvFrameType, CurrentFrameType);
-	if(RcvInfo->MsgType != MsgType)
-	{
-		CANFrame_ClearRcvInfo(RcvInfo);
-	}
+
 	if(CurrentFrameType == 0)
 	{
 		// Empty buffer not receive any frame
@@ -66,7 +63,10 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 
 	} else
 	{
-
+		if(RcvInfo->MsgType != MsgType)
+		{
+			CANFrame_ClearRcvInfo(RcvInfo);
+		}
 		if(RcvFrameType == CANFRAME_FRAMETYPE_END)
 		{
 			SyncPrintf("Frame Type END\r\n");
@@ -138,6 +138,7 @@ void CANFrame_RcvTask(void* arg)
 			}
 			SyncPrintf("\r\n");
 //			CANHandler->ReceiveDataCB(CANHandler->ReceiveDataCB_arg, &CANFrame_RxHeader, rcvInfo->Data);
+			CANFrame_ClearRcvInfo(rcvInfo);
 		}
 	}
 }
@@ -215,15 +216,16 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 				CAN_TxHeader.StdId =ID_NUM | Frame_type;
 			}
 			/*---------send data-----------------------------------------------------------*/
-			SyncPrintf("Transmit ID 0x%.2x: ", CAN_TxHeader.StdId);
-			for(uint8_t i = 0; i<8; i++)
-			{
-				SyncPrintf("%d ", TxFrame[i]);
-			}
-
+//			SyncPrintf("Transmit ID 0x%.2x: ", CAN_TxHeader.StdId);
+//			for(uint8_t i = 0; i<8; i++)
+//			{
+//				SyncPrintf("%d ", TxFrame[i]);
+//			}
+//			osDelay(1);
 			waitTime = timeout - (osKernelGetTickCount() - startTime);
+
 			Status = CAN_OS_Transmit(canhandler->CAN, &CAN_TxHeader, TxFrame, &Txmailbox, waitTime);
-			SyncPrintf("Mail box %d\r\n", (uint16_t)Txmailbox);
+//			SyncPrintf("Mail box %d\r\n", (uint16_t)Txmailbox);
 			if(Status != osOK)
 			{
 				return Status;
