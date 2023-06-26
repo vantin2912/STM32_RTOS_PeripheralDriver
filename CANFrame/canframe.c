@@ -2,9 +2,9 @@
 #include <string.h>
 
 
-#define CANFRAME_GETMSGTYPE_FROMID(CANID)			((CANID>> 7) 	& 0xff)
-#define CANFRAME_GETTARGETNODE_FROMID(CANID)	((CANID>> 3) 	& 0xff)
-#define CANFRAME_GETFRAMETYPE_FROMID(CANID)		((CANID)		& 0xff)
+#define CANFRAME_GETMSGTYPE_FROMID(CANID)			((CANID>> 7) 	& 0x0f)
+#define CANFRAME_GETTARGETNODE_FROMID(CANID)	((CANID>> 3) 	& 0x0f)
+#define CANFRAME_GETFRAMETYPE_FROMID(CANID)		((CANID)		& 0x07)
 
 
 const osThreadAttr_t CANRcvTask_attributes = {
@@ -26,22 +26,36 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 	uint8_t RcvFrameType = CANFRAME_GETFRAMETYPE_FROMID(RxHeader->StdId);
 	uint8_t MsgType =	CANFRAME_GETMSGTYPE_FROMID(RxHeader->StdId);
 	uint8_t CurrentFrameType = RcvInfo->CurrentFrameType;
+	SyncPrintf("Rcv Frame Type %d CurrentFrameType %d \r\n", RcvFrameType, CurrentFrameType);
+	if(RcvInfo->MsgType != MsgType)
+	{
+		CANFrame_ClearRcvInfo(RcvInfo);
+	}
 	if(CurrentFrameType == 0)
 	{
 		// Empty buffer not receive any frame
+		if(RxData[1] > CANFRAME_MAX_BUFFER_SIZE)
+		{
+			return NULL;
+		}
 		RcvInfo->ExpectedLen = RxData[1];
 		RcvInfo->MsgType = MsgType;
 		RcvInfo->CurrentFrameType = RcvFrameType;
 		switch (RcvFrameType) {
 			case CANFRAME_FRAMETYPE_FIRST:
+				SyncPrintf("\r\n________________________\r\n");
+
+				SyncPrintf("Frame Type First \r\n");
 				CpyLen = 6;
 				memcpy(RcvInfo->Data + RcvInfo->ReceivedLen, RxData + 2, CpyLen);
 				RcvInfo->ReceivedLen += CpyLen;
+				SyncPrintf("CpyLen %d ReceivedLen %d ExpectedLen %d\r\n", CpyLen, RcvInfo->ReceivedLen, RcvInfo->ExpectedLen);
 				return NULL;
 			case CANFRAME_FRAMETYPE_END:
 				CpyLen = RcvInfo->ExpectedLen;
 				memcpy(RcvInfo->Data + RcvInfo->ReceivedLen, RxData + 2, CpyLen);
 				RcvInfo->ReceivedLen += CpyLen;
+				SyncPrintf("CpyLen %d ReceivedLen %d ExpectedLen %d\r\n", CpyLen, RcvInfo->ReceivedLen, RcvInfo->ExpectedLen);
 				return RcvInfo;
 			default:
 				CpyLen = 0;
@@ -52,32 +66,32 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 
 	} else
 	{
-		if (RcvFrameType != CurrentFrameType + 1 || RcvInfo->MsgType != MsgType)
+
+		if(RcvFrameType == CANFRAME_FRAMETYPE_END)
+		{
+			SyncPrintf("Frame Type END\r\n");
+			RcvInfo->CurrentFrameType = CANFRAME_FRAMETYPE_END;
+			CpyLen = RcvInfo->ExpectedLen - RcvInfo->ReceivedLen;
+			memcpy(RcvInfo->Data + RcvInfo->ReceivedLen, RxData + 1, CpyLen);
+			RcvInfo->ReceivedLen += CpyLen;
+			SyncPrintf("CpyLen %d ReceivedLen %d ExpectedLen %d\r\n", CpyLen, RcvInfo->ReceivedLen, RcvInfo->ExpectedLen);
+			return RcvInfo;
+		}
+		else if (RcvFrameType != CurrentFrameType + 1 )
 		{
 			CANFrame_ClearRcvInfo(RcvInfo);
 			return NULL;
 		}
-		else if(RcvFrameType == CANFRAME_FRAMETYPE_END)
-		{
-			CpyLen = 7;
-			memcpy(RcvInfo->Data + RcvInfo->ReceivedLen, RxData + 1, CpyLen);
-			RcvInfo->ReceivedLen += CpyLen;
-			if(RcvInfo->ExpectedLen == RcvInfo->ReceivedLen)
-			{
-				return RcvInfo;
-			}
-			else
-			{
-				CANFrame_ClearRcvInfo(RcvInfo);
-				return NULL;
-			}
-		}
 		else
 		{
+			SyncPrintf("Frame Type %d\r\n", RcvFrameType);
+
 			RcvInfo->CurrentFrameType = RcvFrameType;
 			CpyLen = 7;
 			memcpy(RcvInfo->Data + RcvInfo->ReceivedLen, RxData + 1, CpyLen);
 			RcvInfo->ReceivedLen += CpyLen;
+			SyncPrintf("CpyLen %d ReceivedLen %d ExpectedLen %d\r\n", CpyLen, RcvInfo->ReceivedLen, RcvInfo->ExpectedLen);
+
 			return NULL;
 		}
 	}
@@ -105,7 +119,7 @@ void CANFrame_RcvTask(void* arg)
 			continue;
 		}
 		TargetNode = CANFRAME_GETTARGETNODE_FROMID(CAN_RxHeader.StdId);
-		if((TargetNode != CANHandler->nodeID) || (TargetNode != CANFRAME_ALL_NODE))
+		if( !((TargetNode != CANHandler->nodeID) || (TargetNode != CANFRAME_ALL_NODE)))
 		{
 			SyncPrintf("Receive Wrong Target = %d \r\n", TargetNode);
 			continue;
@@ -117,8 +131,14 @@ void CANFrame_RcvTask(void* arg)
 			CANFrame_RxHeader.DataLen = rcvInfo->ExpectedLen;
 			CANFrame_RxHeader.MessageType = rcvInfo->MsgType;
 			CANFrame_RxHeader.senderID = senderID;
+			SyncPrintf("LightGPS Rcv from ID 0x%.2x len %d: ", senderID, CANFrame_RxHeader.DataLen);
+			for(uint8_t i = 0; i< CANFrame_RxHeader.DataLen ; i++)
+			{
+				SyncPrintf("%d ", rcvInfo->Data[i]);
+			}
+			SyncPrintf("\r\n");
+//			CANHandler->ReceiveDataCB(CANHandler->ReceiveDataCB_arg, &CANFrame_RxHeader, rcvInfo->Data);
 		}
-		CANHandler->ReceiveDataCB(CANHandler->ReceiveDataCB_arg, &CANFrame_RxHeader, rcvInfo->Data);
 	}
 }
 
@@ -130,6 +150,7 @@ int CANFrame_Init(CANFrame_HandlerStruct* canhandler, CAN_OS_HandlerStruct* CAN,
 	canhandler->usedFilterBank = 0;
 	canhandler->RxFifo = CAN_RxFifo;
 	canhandler->rcvHandler_Th = osThreadNew(CANFrame_RcvTask, canhandler, &CANRcvTask_attributes);
+	CANFrame_FilterConfig(canhandler, CANFRAME_MSGTYPE_BROADCAST, CAN_RxFifo);
 	return CANFrame_FilterConfig(canhandler, nodeID, CAN_RxFifo);
 
 }
@@ -156,6 +177,11 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 	uint8_t isLastFrame=0;
 	uint32_t startTime = osKernelGetTickCount();
 	uint32_t waitTime;
+
+	if( CANFrame_txHeader->DataLen > CANFRAME_MAX_BUFFER_SIZE)
+	{
+		return osErrorParameter;
+	}
 	/*Add nodeID vs Data length at first frame -----------------------------------*/
 	for (int i = 0; i < DataLength; i++)
 	{
