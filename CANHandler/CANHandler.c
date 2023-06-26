@@ -28,7 +28,8 @@ int CAN_OS_Start(CAN_OS_HandlerStruct* CANHandler)
 
 	return HAL_CAN_Start(CANHandler->hcan);
 }
-static void CAN_MailboxSync(CAN_OS_HandlerStruct* CANHandler)
+
+static inline void CAN_MailboxSync(CAN_OS_HandlerStruct* CANHandler)
 {
 	uint32_t FreeMailbox;
 	uint32_t semCount;
@@ -38,7 +39,7 @@ static void CAN_MailboxSync(CAN_OS_HandlerStruct* CANHandler)
 		semCount = osSemaphoreGetCount(CANHandler->TxSemaphore);
 		if(semCount == FreeMailbox)
 		{
-			return ;
+			break;
 		}else if( semCount < FreeMailbox)
 		{
 			osSemaphoreRelease(CANHandler->TxSemaphore);
@@ -58,11 +59,34 @@ int CAN_OS_Transmit(CAN_OS_HandlerStruct* CANHandler, const CAN_TxHeaderTypeDef 
 	Status = HAL_CAN_AddTxMessage(CANHandler->hcan, txHeader, txData, txMailbox);
 	if (Status != HAL_OK){
 		osSemaphoreRelease(CANHandler->TxSemaphore);
-	}
-	return Status;
+		return osError;
+	};
+
+	return osOK;
 }
 
-int CAN_OS_ListenMsg(CAN_OS_HandlerStruct* CANHandler, uint32_t rxFifo, CAN_RxHeaderTypeDef* rxHeader, uint8_t* rxData, uint32_t timeout)
+int CAN_OS_WaitMailboxEmpty(CAN_OS_HandlerStruct* CANHandler, uint32_t Mailbox, uint32_t timeout)
+{
+	uint32_t waitEvent;
+	switch (Mailbox) {
+		case 1:
+			waitEvent = CAN_OS_Mailbox0Empty_Event;
+			break;
+		case 2:
+			waitEvent = CAN_OS_Mailbox1Empty_Event;
+			break;
+		case 3:
+			waitEvent = CAN_OS_Mailbox2Empty_Event;
+			break;
+		default:
+			return osErrorParameter;
+			break;
+	}
+	int Status = osEventFlagsWait(CANHandler->EventFlag, waitEvent, osFlagsWaitAll, timeout);
+	return Status > 0 ? osOK : Status;
+}
+
+int CAN_OS_ListenMsg(CAN_OS_HandlerStruct* CANHandler, uint32_t rxFifo, uint32_t timeout)
 {
 	int Status;
 	uint32_t activateITS;
@@ -74,23 +98,29 @@ int CAN_OS_ListenMsg(CAN_OS_HandlerStruct* CANHandler, uint32_t rxFifo, CAN_RxHe
 	else if (rxFifo == CAN_FILTER_FIFO1 ) {
 		activateITS = CAN_IT_RX_FIFO1_MSG_PENDING;
 		waitEvent = CAN_OS_RxFifo0Cplt_Event;
-
 	}
 	else return osErrorParameter;
 
 	Status = HAL_CAN_ActivateNotification(CANHandler->hcan, activateITS);
 
 	Status = osSemaphoreAcquire(CANHandler->RxSemaphore, timeout);
-	if (Status == osErrorTimeout) return HAL_TIMEOUT;
+	if (Status != osOK) return Status;
 	Status = osEventFlagsWait(CANHandler->EventFlag, waitEvent, osFlagsWaitAll, timeout);
-	if(Status < 0 )
-	{
-		osSemaphoreRelease(CANHandler->RxSemaphore);
-		return Status;
-	}
-	Status = HAL_CAN_GetRxMessage(CANHandler->hcan, rxFifo, rxHeader, rxData);
 	osSemaphoreRelease(CANHandler->RxSemaphore);
+	return Status > 0 ? osOK : Status;
+}
+
+int CAN_OS_GetRxFifoFillLevel(CAN_OS_HandlerStruct* CANHandler, uint32_t rxFifo, uint8_t* FillLevel)
+{
+	*FillLevel = HAL_CAN_GetRxFifoFillLevel(CANHandler->hcan, rxFifo);
+	return osOK;
+}
+
+int CAN_OS_GetRxMessage(CAN_OS_HandlerStruct* CANHandler, uint32_t rxFifo, CAN_RxHeaderTypeDef* rxHeader, uint8_t* rxData)
+{
+	uint8_t Status = HAL_CAN_GetRxMessage(CANHandler->hcan, rxFifo, rxHeader, rxData);
 	return Status == HAL_OK? osOK: osError;
+
 }
 
 void CAN_OS_RxFifo0Cplt_CB(CAN_OS_HandlerStruct* CANHandler)
@@ -103,32 +133,50 @@ void CAN_OS_RxFifo1Cplt_CB(CAN_OS_HandlerStruct* CANHandler)
 	__HAL_CAN_DISABLE_IT(CANHandler->hcan, CAN_IT_RX_FIFO1_MSG_PENDING);
 	osEventFlagsSet(CANHandler->EventFlag, CAN_OS_RxFifo1Cplt_Event);
 }
-
 void CAN_OS_TxCplt_CB(CAN_OS_HandlerStruct* CANHandler)
 {
 	osSemaphoreRelease(CANHandler->TxSemaphore);
+
 }
-void CAN_OS_RegisterCB(CAN_OS_HandlerStruct *hcan, uint8_t callbackID, void (* pCallback)(CAN_HandleTypeDef *_hcan))
+void CAN_OS_TxMailbox0Empty_CB(CAN_OS_HandlerStruct* CANHandler)
+{
+	osEventFlagsSet(CANHandler->EventFlag, CAN_OS_Mailbox0Empty_Event);
+	osSemaphoreRelease(CANHandler->TxSemaphore);
+}
+void CAN_OS_TxMailbox1Empty_CB(CAN_OS_HandlerStruct* CANHandler)
+{
+	osEventFlagsSet(CANHandler->EventFlag, CAN_OS_Mailbox1Empty_Event);
+	osSemaphoreRelease(CANHandler->TxSemaphore);
+}
+void CAN_OS_TxMailbox2Empty_CB(CAN_OS_HandlerStruct* CANHandler)
+{
+	osEventFlagsSet(CANHandler->EventFlag, CAN_OS_Mailbox2Empty_Event);
+	osSemaphoreRelease(CANHandler->TxSemaphore);
+}
+
+int CAN_OS_RegisterCB(CAN_OS_HandlerStruct *hcan, uint8_t callbackID, void (* pCallback)(CAN_HandleTypeDef *_hcan))
 {
 	switch (callbackID) {
-		case CAN_OS_ActivateTxCB_ID:
+		case CAN_OS_ActivateRxFifo0MsgPending_ID:
+			HAL_CAN_RegisterCallback(hcan->hcan,HAL_CAN_RX_FIFO0_MSG_PENDING_CB_ID,pCallback);
+			break;
+		case CAN_OS_ActivateRxFifo1MsgPending_ID:
+			HAL_CAN_RegisterCallback(hcan->hcan,HAL_CAN_RX_FIFO1_MSG_PENDING_CB_ID,pCallback);
+			break;
+		case CAN_OS_ActivateTxMailbox0EmptyCB_ID:
 			HAL_CAN_RegisterCallback(hcan->hcan, HAL_CAN_TX_MAILBOX0_COMPLETE_CB_ID,pCallback);
-			HAL_CAN_RegisterCallback(hcan->hcan, HAL_CAN_TX_MAILBOX1_COMPLETE_CB_ID,pCallback);
-			HAL_CAN_RegisterCallback(hcan->hcan, HAL_CAN_TX_MAILBOX2_COMPLETE_CB_ID,pCallback);
 			HAL_CAN_RegisterCallback(hcan->hcan, HAL_CAN_TX_MAILBOX0_ABORT_CB_ID,pCallback);
+			break;
+		case CAN_OS_ActivateTxMailbox1EmptyCB_ID:
+			HAL_CAN_RegisterCallback(hcan->hcan, HAL_CAN_TX_MAILBOX1_COMPLETE_CB_ID,pCallback);
 			HAL_CAN_RegisterCallback(hcan->hcan, HAL_CAN_TX_MAILBOX1_ABORT_CB_ID,pCallback);
+			break;
+		case CAN_OS_ActivateTxMailbox2EmptyCB_ID:
+			HAL_CAN_RegisterCallback(hcan->hcan, HAL_CAN_TX_MAILBOX2_COMPLETE_CB_ID,pCallback);
 			HAL_CAN_RegisterCallback(hcan->hcan, HAL_CAN_TX_MAILBOX2_ABORT_CB_ID,pCallback);
 			break;
-		case CAN_OS_ActivateRxFifo0_ID:
-			HAL_CAN_RegisterCallback(hcan->hcan,HAL_CAN_RX_FIFO0_MSG_PENDING_CB_ID,pCallback);
-
-			break;
-		case CAN_OS_ActivateRxFifo1_ID:
-			HAL_CAN_RegisterCallback(hcan->hcan,HAL_CAN_RX_FIFO1_MSG_PENDING_CB_ID,pCallback);
-
-			break;
 		default:
-			return ;
-			break;
+			return osErrorParameter;
 	}
+	return osOK;
 }
