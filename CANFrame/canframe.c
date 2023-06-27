@@ -2,11 +2,9 @@
 #include <string.h>
 
 
-#define CANFRAME_GETMSGTYPE_FROMID(CANID)			((CANID>> 7) 	& 0x0f)
+#define CANFRAME_GETMSGTYPE_FROMID(CANID)		((CANID>> 7) 	& 0x0f)
 #define CANFRAME_GETTARGETNODE_FROMID(CANID)	((CANID>> 3) 	& 0x0f)
-#define CANFRAME_GETFRAMETYPE_FROMID(CANID)		((CANID)		& 0x07)
-
-
+#define CANFRAME_GETFRAMETYPE_FROMID(CANID)		((CANID>> 0) 	& 0x07)
 const osThreadAttr_t CANRcvTask_attributes = {
   .name = "CANRcvHandler",
   .stack_size = 200 * 4,
@@ -140,12 +138,14 @@ void CANFrame_RcvTask(void* arg)
 			CANFrame_RxHeader.DataLen = rcvInfo->ExpectedLen;
 			CANFrame_RxHeader.MessageType = rcvInfo->MsgType;
 			CANFrame_RxHeader.senderID = senderID;
-//			SyncPrintf("LightGPS Rcv from ID 0x%.2x len %d: \r\n", senderID, CANFrame_RxHeader.DataLen);
+			SyncPrintf("LightGPS Rcv from ID 0x%.2x len %d: \r\n", senderID, CANFrame_RxHeader.DataLen);
 			for(uint8_t i = 0; i< CANFrame_RxHeader.DataLen ; i++)
 			{
 				SyncPrintf("%d ", rcvInfo->Data[i]);
 			}
 			SyncPrintf("\r\n");
+//			rcvInfo->Data[CANFrame_RxHeader.DataLen] = 0;
+//			SyncPrintf("%s \r\n", rcvInfo->Data);
 			if(CANHandler->ReceiveDataCB != NULL)
 			{
 				CANHandler->ReceiveDataCB(CANHandler->ReceiveDataCB_arg, &CANFrame_RxHeader, rcvInfo->Data);
