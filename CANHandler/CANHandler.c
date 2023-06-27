@@ -39,7 +39,7 @@ static inline void CAN_MailboxSync(CAN_OS_HandlerStruct* CANHandler)
 		semCount = osSemaphoreGetCount(CANHandler->TxSemaphore);
 		if(semCount == FreeMailbox)
 		{
-			break;
+			return;
 		}else if( semCount < FreeMailbox)
 		{
 			osSemaphoreRelease(CANHandler->TxSemaphore);

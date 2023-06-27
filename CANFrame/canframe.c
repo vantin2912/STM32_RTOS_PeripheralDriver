@@ -26,7 +26,7 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 	uint8_t RcvFrameType = CANFRAME_GETFRAMETYPE_FROMID(RxHeader->StdId);
 	uint8_t MsgType =	CANFRAME_GETMSGTYPE_FROMID(RxHeader->StdId);
 	uint8_t CurrentFrameType = RcvInfo->CurrentFrameType;
-	SyncPrintf("Rcv Frame Type %d CurrentFrameType %d \r\n", RcvFrameType, CurrentFrameType);
+//	SyncPrintf("Rcv Frame Type %d CurrentFrameType %d \r\n", RcvFrameType, CurrentFrameType);
 
 	if(CurrentFrameType == 0)
 	{
@@ -122,12 +122,12 @@ void CANFrame_RcvTask(void* arg)
 		{
 			continue;
 		}
-		SyncPrintf("LightGPS Rcv ID 0x%.2x len %d: ", CAN_RxHeader.StdId, CAN_RxHeader.DLC);
-		for(uint8_t i = 0; i<8; i++)
-		{
-			SyncPrintf("%d ", RxData[i]);
-		}
-		SyncPrintf("\r\n");
+//		SyncPrintf("LightGPS Rcv ID 0x%.2x len %d: ", CAN_RxHeader.StdId, CAN_RxHeader.DLC);
+//		for(uint8_t i = 0; i<8; i++)
+//		{
+//			SyncPrintf("%d ", RxData[i]);
+//		}
+//		SyncPrintf("\r\n");
 		TargetNode = CANFRAME_GETTARGETNODE_FROMID(CAN_RxHeader.StdId);
 		if( !((TargetNode != CANHandler->nodeID) || (TargetNode != CANFRAME_ALL_NODE)))
 		{
@@ -146,14 +146,10 @@ void CANFrame_RcvTask(void* arg)
 				SyncPrintf("%d ", rcvInfo->Data[i]);
 			}
 			SyncPrintf("\r\n");
-<<<<<<< HEAD
 			if(CANHandler->ReceiveDataCB != NULL)
 			{
 				CANHandler->ReceiveDataCB(CANHandler->ReceiveDataCB_arg, &CANFrame_RxHeader, rcvInfo->Data);
 			}
-=======
-//			CANHandler->ReceiveDataCB(CANHandler->ReceiveDataCB_arg, &CANFrame_RxHeader, rcvInfo->Data);
->>>>>>> 137ce9eafa54024def7991a16ca33a4377e5e4a0
 			CANFrame_ClearRcvInfo(rcvInfo);
 		}
 	}
