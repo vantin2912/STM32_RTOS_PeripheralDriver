@@ -162,8 +162,10 @@ int CANFrame_Init(CANFrame_HandlerStruct* canhandler, CAN_OS_HandlerStruct* CAN,
 	canhandler->nodeID = nodeID;
 	canhandler->usedFilterBank = 0;
 	canhandler->RxFifo = CAN_RxFifo;
+
+	canhandler->TxSem = osSemaphoreNew(1, 1, NULL);
 	canhandler->rcvHandler_Th = osThreadNew(CANFrame_RcvTask, canhandler, &CANRcvTask_attributes);
-	CANFrame_FilterConfig(canhandler, CANFRAME_MSGTYPE_BROADCAST, CAN_RxFifo);
+	CANFrame_FilterConfig(canhandler, CANFRAME_ALL_NODE, CAN_RxFifo);
 	return CANFrame_FilterConfig(canhandler, nodeID, CAN_RxFifo);
 
 }
@@ -196,6 +198,9 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 		return osErrorParameter;
 	}
 	/*Add nodeID vs Data length at first frame -----------------------------------*/
+
+	osSemaphoreAcquire(canhandler->TxSem, timeout);
+
 	for (int i = 0; i < DataLength; i++)
 	{
 		uint8_t byte = Data[i];
@@ -234,6 +239,7 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 			Status = CAN_OS_Transmit(canhandler->CAN, &CAN_TxHeader, TxFrame, &Txmailbox, waitTime);
 			if(Status != osOK)
 			{
+				osSemaphoreRelease(canhandler->TxSem);
 				return Status;
 			}
 			memset(TxFrame, 0, CANFRAME_MAX_DATA_LENGTH);
@@ -244,6 +250,8 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 			Frame_type++;
 		}
 	}
+	osSemaphoreRelease(canhandler->TxSem);
+
 	return osOK;
 }
 int CANFrame_RegCB(CANFrame_HandlerStruct* CANHandler, uint8_t CallbackID,
@@ -260,88 +268,6 @@ int CANFrame_RegCB(CANFrame_HandlerStruct* CANHandler, uint8_t CallbackID,
 	}
 
 }
-
-//int CANFrame_WaitMsg(CANFrame_HandlerStruct* canhandler, CANFrame_RxHeaderTypedef* pIDtype,uint8_t *ReceiveData, uint32_t *ReceiveLength)
-//{
-//	CAN_RxHeaderTypeDef RxHeader;
-//	uint8_t frame[CAN_MAX_DATA_LENGTH] = {0};
-//	uint8_t isLastFrame = 0;
-//	uint8_t SenderId=0;
-//	uint8_t LengthRecData=0;
-//	CANConfigIDRxtypedef *Rec= (CANConfigIDRxtypedef*) malloc(CAN_MAX_DATA_LENGTH);
-//	for (int i=0; i< 13; i++)
-//	{
-//		Rec[i].Index=0;
-//		Rec[i].ExpectedLength=0;
-//		Rec[i].frameIndex=0;
-//	}
-//		while(!isLastFrame){
-//			while (HAL_CAN_GetRxFifoFillLevel(canhandler->hcan, CAN_RX_FIFO0) == 0);
-//			if (HAL_CAN_GetRxMessage(canhandler->hcan, CAN_RX_FIFO0, &RxHeader, frame) != HAL_OK)
-//			{
-//				Error_Handler();
-//			}
-//			SenderId=frame[0];
-//			uint16_t ID_NUM = RxHeader.StdId;
-//			pIDtype -> Frametype = ID_NUM & 0x07;
-//			pIDtype -> TargetNode = (ID_NUM >> 3) & 0x0F;
-//			pIDtype ->  MessageType= (ID_NUM >> 7) & 0x0F;
-//			switch (pIDtype->Frametype) {
-//			  case FIRST_FRAME:
-//			    Rec[SenderId].ExpectedLength = frame[1];
-//			    Rec[SenderId].frameIndex = 2;
-//			    break;
-//			  case END_FRAME:
-//			    Rec[SenderId].frameIndex = 1;
-//			    isLastFrame = 1;
-//			    break;
-//			  default:
-//			    Rec[SenderId].frameIndex = 1;
-//			    break;
-//			}
-//			for(;Rec[SenderId].frameIndex<CAN_MAX_DATA_LENGTH;Rec[SenderId].frameIndex++){
-//				Rec[SenderId].ReceivedBuffer[Rec[SenderId].Index]=frame[Rec[SenderId].frameIndex];
-//				Rec[SenderId].Index++;
-//			}
-//		}
-//	*ReceiveLength=Rec[SenderId].ExpectedLength;
-//	memcpy(ReceiveData,Rec[SenderId].ReceivedBuffer,Rec[SenderId].ExpectedLength);
-//	memset(Rec[SenderId].ReceivedBuffer,0,Rec[SenderId].ExpectedLength);
-//	Rec[SenderId].Index=0;
-//	free(Rec);
-//	return HAL_OK;
-//}
-
-int CAN_Send_Request(CANFrame_HandlerStruct* canhandler,uint8_t* Data)
-{
-	uint32_t Txmailbox;
-	CAN_TxHeaderTypeDef Txheader;
-	Txheader.DLC=1;
-	Txheader.RTR=CAN_RTR_DATA;
-	Txheader.IDE=CAN_ID_STD;
-	Txheader.StdId=CANFRAME_MSGTYPE_TEST_FRAME;
-	return CAN_OS_Transmit(canhandler->CAN, &Txheader, Data, &Txmailbox, 20);
-
-}
-
-//uint16_t CAN_RECEIVE_ACK(CANFrame_HandlerStruct* canhandler)
-//{
-//	CAN_RxHeaderTypeDef Rxheader;
-//	uint8_t frame=0;
-//	uint8_t ack=0;
-//	while (HAL_CAN_GetRxFifoFillLevel(canhandler->hcan, CAN_RX_FIFO0) == 0)
-//	if (HAL_CAN_GetRxMessage(canhandler->hcan, CAN_RX_FIFO0, &Rxheader, frame) != HAL_OK)
-//	{
-//		Error_Handler();
-//	}
-//	if(Rxheader.StdId==TEST_FRAME&&frame==1){
-//		return HAL_ERROR;
-//	}else if(Rxheader.StdId==TEST_FRAME&&frame==0)
-//	{
-//		return HAL_OK;
-//	}
-//}
-
 
 int CANFrame_FilterConfig(CANFrame_HandlerStruct *Can, uint16_t NodeID, uint32_t RxFifo)
 {

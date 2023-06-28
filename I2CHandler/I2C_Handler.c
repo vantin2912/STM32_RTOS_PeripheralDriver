@@ -68,7 +68,7 @@ int I2C_OS_MEM_Write_IT(I2C_OS_HandlerStruct* i2c, uint16_t DevAddress,uint16_t 
 	}
 	Status = osEventFlagsWait(i2c->EventFlag, I2C_OS_TX_CPLT_FLAG, osFlagsWaitAll, timeout);
 	osSemaphoreRelease(i2c->Semaphore);
-	return Status;
+	return Status > 0 ? osOK: Status ;
 }
 
 int I2C_OS_MEM_Read_IT(I2C_OS_HandlerStruct* i2c, uint16_t DevAddress,
@@ -87,7 +87,7 @@ int I2C_OS_MEM_Read_IT(I2C_OS_HandlerStruct* i2c, uint16_t DevAddress,
 	}
 	Status = osEventFlagsWait(i2c->EventFlag, I2C_OS_RX_CPLT_FLAG, osFlagsWaitAll, timeout);
 	osSemaphoreRelease(i2c->Semaphore);
-	return Status;
+	return Status > 0 ? osOK: Status;
 }
 
 int I2C_OS_IsDeviceReady(I2C_OS_HandlerStruct* i2c, uint16_t DevAddress, uint32_t

@@ -8,6 +8,8 @@
 #ifndef CANHANDLER_CANHANDLER_H_
 #define CANHANDLER_CANHANDLER_H_
 
+
+
 #include "main.h"
 #include "cmsis_os.h"
 #define CAN_OS_TxMailBox_Max		3UL

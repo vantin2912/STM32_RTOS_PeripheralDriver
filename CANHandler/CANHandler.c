@@ -164,4 +164,5 @@ int CAN_OS_RegisterCB(CAN_OS_HandlerStruct *hcan, uint8_t callbackID, void (* pC
 			break;
 	}
 	return osOK;
+	return osOK;
 }
