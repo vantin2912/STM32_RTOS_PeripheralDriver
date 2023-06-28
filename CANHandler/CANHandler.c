@@ -59,7 +59,7 @@ int CAN_OS_Transmit(CAN_OS_HandlerStruct* CANHandler, const CAN_TxHeaderTypeDef 
 	if(CANError != 0)
 	{
 		CAN_MailboxSync(CANHandler);
-		SyncPrintf("Error 0x%.6lx \r\n", CANError);
+//		SyncPrintf("Error 0x%.6lx \r\n", CANError);
 	}
 	Status = HAL_CAN_AddTxMessage(CANHandler->hcan, txHeader, txData, txMailbox);
 //	SyncPrintf("CAN Tx ")
@@ -166,8 +166,9 @@ int CAN_OS_RegisterCB(CAN_OS_HandlerStruct *hcan, uint8_t callbackID, void (* pC
 
 			break;
 		default:
-			return ;
+			return osErrorParameter;
 			break;
 	}
+	return osOK;
 	return osOK;
 }

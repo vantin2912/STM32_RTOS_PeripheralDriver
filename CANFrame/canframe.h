@@ -15,8 +15,13 @@
 #define CANFRAME_MSGTYPE_COMMAND_FRAME 					0b0001
 #define CANFRAME_MSGTYPE_ACK_COMMAND_FRAME 				0b0010
 #define CANFRAME_MSGTYPE_REMOTE_NOTICE_FRAME 			0b0011
-#define CANFRAME_MSGTYPE_TEST_FRAME 					0b0100
-#define CANFRAME_MSGTYPE_ACK_TEST_FRAME 				0b0101
+#define CANFRAME_MSGTYPE_DATA_FRAME						0b0100
+
+#define CANFRAME_MSGTYPE_TEST_BROADCAST 						0b1000
+#define CANFRAME_MSGTYPE_TEST_COMMAND_FRAME 					0b1001
+#define CANFRAME_MSGTYPE_TEST_ACK_COMMAND_FRAME 				0b1010
+#define CANFRAME_MSGTYPE_TEST_REMOTE_NOTICE_FRAME 				0b1011
+#define CANFRAME_MSGTYPE_TEST_DATA_FRAME							0b1100
 
 #define CANFRAME_ALL_NODE 						0b0000
 #define CANFRAME_ENGINE_CONTROL_ID					0b0001
@@ -73,6 +78,7 @@ typedef struct CANFrame_HandlerStruct{
 	uint16_t usedFilterBank;
 	uint32_t RxFifo;
 
+	osSemaphoreId_t TxSem;
 	osThreadId_t rcvHandler_Th;
 	void (*ReceiveDataCB) (void*, CANFrame_RxHeaderTypedef*, uint8_t* );
 	void* ReceiveDataCB_arg;
