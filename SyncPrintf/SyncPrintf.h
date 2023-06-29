@@ -15,7 +15,7 @@
 #include <stdarg.h>
 
 #define DebugUART huart1
-#define PrintBufferSize 50
+#define PrintBufferSize 70
 
 extern UART_HandleTypeDef DebugUART;
 

@@ -138,17 +138,17 @@ void CANFrame_RcvTask(void* arg)
 			CANFrame_RxHeader.DataLen = rcvInfo->ExpectedLen;
 			CANFrame_RxHeader.MessageType = rcvInfo->MsgType;
 			CANFrame_RxHeader.senderID = senderID;
-			SyncPrintf("LightGPS Rcv from ID 0x%.2x len %d: \r\n", senderID, CANFrame_RxHeader.DataLen);
-			for(uint8_t i = 0; i< CANFrame_RxHeader.DataLen ; i++)
-			{
-				SyncPrintf("%d ", rcvInfo->Data[i]);
-			}
-			SyncPrintf("\r\n");
-//			rcvInfo->Data[CANFrame_RxHeader.DataLen] = 0;
+//			SyncPrintf("LightGPS Rcv from ID 0x%.2x len %d: \r\n", senderID, CANFrame_RxHeader.DataLen);
+//			for(uint8_t i = CANFrame_RxHeader.DataLen -20 ; i< CANFrame_RxHeader.DataLen - 15 ; i++)
+//			{
+//				SyncPrintf("%d ", rcvInfo->Data[i]);
+//			}
+//			SyncPrintf("\r\n");
+			rcvInfo->Data[CANFrame_RxHeader.DataLen] = 0;
 //			SyncPrintf("%s \r\n", rcvInfo->Data);
 			if(CANHandler->ReceiveDataCB != NULL)
 			{
-				CANHandler->ReceiveDataCB(CANHandler->ReceiveDataCB_arg, &CANFrame_RxHeader, rcvInfo->Data);
+				CANHandler->ReceiveDataCB(&CANFrame_RxHeader, rcvInfo->Data);
 			}
 			CANFrame_ClearRcvInfo(rcvInfo);
 		}
@@ -261,13 +261,12 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 	return osOK;
 }
 int CANFrame_RegCB(CANFrame_HandlerStruct* CANHandler, uint8_t CallbackID,
-					void (*Func)(void*, CANFrame_RxHeaderTypedef*, uint8_t*), void* arg)
+					void (*Func)(CANFrame_RxHeaderTypedef*, uint8_t*))
 {
 	switch (CallbackID) {
 		case CANFRAME_RCVCPLT_CB_ID:
 			CANHandler->ReceiveDataCB = Func;
-			CANHandler->ReceiveDataCB_arg = arg;
-			return HAL_OK;
+			return osOK;
 		default:
 			return osErrorParameter;
 

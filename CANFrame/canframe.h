@@ -80,8 +80,7 @@ typedef struct CANFrame_HandlerStruct{
 
 	osSemaphoreId_t TxSem;
 	osThreadId_t rcvHandler_Th;
-	void (*ReceiveDataCB) (void*, CANFrame_RxHeaderTypedef*, uint8_t* );
-	void* ReceiveDataCB_arg;
+	void (*ReceiveDataCB) (CANFrame_RxHeaderTypedef*, uint8_t* );
 	CANFrame_RcvInfoTypedef _RxRcvInfo[CANFRAME_MAX_NODE];
 }CANFrame_HandlerStruct;
 
@@ -93,7 +92,7 @@ int CANFrame_FilterConfig(CANFrame_HandlerStruct *Canhandle, uint16_t NodeID, ui
 //int CANFrame_WaitMsg(CANFrame_HandlerStruct* Canhandle,CANFrame_RxHeaderTypedef* pIDtype,uint8_t *ReceiveData, uint32_t *ReceiveLength);
 int CANFrame_Send(CANFrame_HandlerStruct* Canhandle,CANFrame_TxHeaderTypedef* pIDtype, uint8_t *Data, uint32_t Timeout);
 int CANFrame_RegCB(CANFrame_HandlerStruct* CANHandler, uint8_t CallbackID,
-					void (*Func)(void*, CANFrame_RxHeaderTypedef*, uint8_t*), void* arg);
+					void (*Func)(CANFrame_RxHeaderTypedef*, uint8_t*));
 
 int CANFrame_SendRequest(CANFrame_HandlerStruct* Canhandle,uint8_t Data);
 int CANFrame_RECEIVE_ACK(CANFrame_HandlerStruct* Canhandle);
