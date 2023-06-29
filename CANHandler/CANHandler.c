@@ -39,7 +39,7 @@ static inline void CAN_MailboxSync(CAN_OS_HandlerStruct* CANHandler)
 		semCount = osSemaphoreGetCount(CANHandler->TxSemaphore);
 		if(semCount == FreeMailbox)
 		{
-			break;
+			return;
 		}else if( semCount < FreeMailbox)
 		{
 			osSemaphoreRelease(CANHandler->TxSemaphore);
@@ -56,16 +56,18 @@ int CAN_OS_Transmit(CAN_OS_HandlerStruct* CANHandler, const CAN_TxHeaderTypeDef 
 	CAN_MailboxSync(CANHandler);
 	Status = osSemaphoreAcquire(CANHandler->TxSemaphore, timeout);
 	if(Status == osErrorTimeout) return HAL_TIMEOUT;
+<<<<<<< HEAD
 	uint32_t CANError = HAL_CAN_GetError(CANHandler->hcan);
 	if(CANError != 0)
+=======
+>>>>>>> deee424326c2187cc4582f863bcad26da37046fb
 	Status = HAL_CAN_AddTxMessage(CANHandler->hcan, txHeader, txData, txMailbox);
-//	SyncPrintf("CAN Tx ")
+
+
 	if (Status != HAL_OK){
 		osSemaphoreRelease(CANHandler->TxSemaphore);
-		return osError;
-	};
-
-	return osOK;
+	}
+	return Status == HAL_OK? osOK: osError;
 }
 
 //int CAN_OS_WaitMailboxEmpty(CAN_OS_HandlerStruct* CANHandler, uint32_t Mailbox, uint32_t timeout)

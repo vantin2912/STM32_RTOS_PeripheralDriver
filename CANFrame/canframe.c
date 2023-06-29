@@ -233,16 +233,10 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 				CAN_TxHeader.StdId =ID_NUM | Frame_type;
 			}
 			/*---------send data-----------------------------------------------------------*/
-//			SyncPrintf("Transmit ID 0x%.2x: ", CAN_TxHeader.StdId);
-//			for(uint8_t i = 0; i<8; i++)
-//			{
-//				SyncPrintf("%d ", TxFrame[i]);
-//			}
-//			osDelay(1);
-			waitTime = timeout - (osKernelGetTickCount() - startTime);
+
+			if(CANFrame_txHeader->DataLen > 20) osDelay(1);
 
 			Status = CAN_OS_Transmit(canhandler->CAN, &CAN_TxHeader, TxFrame, &Txmailbox, waitTime);
-//			SyncPrintf("Mail box %d\r\n", (uint16_t)Txmailbox);
 			if(Status != osOK)
 			{
 				osSemaphoreRelease(canhandler->TxSem);
