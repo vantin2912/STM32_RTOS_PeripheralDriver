@@ -56,11 +56,6 @@ int CAN_OS_Transmit(CAN_OS_HandlerStruct* CANHandler, const CAN_TxHeaderTypeDef 
 	CAN_MailboxSync(CANHandler);
 	Status = osSemaphoreAcquire(CANHandler->TxSemaphore, timeout);
 	if(Status == osErrorTimeout) return HAL_TIMEOUT;
-<<<<<<< HEAD
-	uint32_t CANError = HAL_CAN_GetError(CANHandler->hcan);
-	if(CANError != 0)
-=======
->>>>>>> deee424326c2187cc4582f863bcad26da37046fb
 	Status = HAL_CAN_AddTxMessage(CANHandler->hcan, txHeader, txData, txMailbox);
 
 
