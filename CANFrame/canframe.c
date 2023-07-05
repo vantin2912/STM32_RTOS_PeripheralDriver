@@ -169,6 +169,7 @@ int CANFrame_Init(CANFrame_HandlerStruct* canhandler, CAN_OS_HandlerStruct* CAN,
 	return CANFrame_FilterConfig(canhandler, nodeID, CAN_RxFifo);
 
 }
+
 int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* CANFrame_txHeader,
 							uint8_t *Data , uint32_t timeout)
 {
@@ -191,7 +192,7 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 	uint8_t isFirstFrame = 1;
 	uint8_t isLastFrame=0;
 	uint32_t startTime = osKernelGetTickCount();
-	uint32_t waitTime;
+	int waitTime;
 
 	if( CANFrame_txHeader->DataLen > CANFRAME_MAX_BUFFER_SIZE)
 	{
@@ -235,7 +236,12 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 			/*---------send data-----------------------------------------------------------*/
 
 			if(CANFrame_txHeader->DataLen > 20) osDelay(1);
-
+			waitTime = timeout - (osKernelGetTickCount() - startTime);
+			if (waitTime < 0)
+			{
+				osSemaphoreRelease(canhandler->TxSem);
+				return osErrorTimeout;
+			}
 			Status = CAN_OS_Transmit(canhandler->CAN, &CAN_TxHeader, TxFrame, &Txmailbox, waitTime);
 			if(Status != osOK)
 			{
@@ -250,10 +256,11 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 			Frame_type++;
 		}
 	}
-	osSemaphoreRelease(canhandler->TxSem);
 
+	osSemaphoreRelease(canhandler->TxSem);
 	return osOK;
 }
+
 int CANFrame_RegCB(CANFrame_HandlerStruct* CANHandler, uint8_t CallbackID,
 					void (*Func)(CANFrame_RxHeaderTypedef*, uint8_t*))
 {
