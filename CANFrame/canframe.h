@@ -4,6 +4,9 @@
 #ifndef CAN_MUTIFRAME_H
 #define CAN_MUTIFRAME_H
 
+#define CANFRAME_ENABLE_COUNTER
+
+
 #define CANFRAME_MAX_NODE							13
 #define CANFRAME_MAX_DATA_LENGTH 					(0x08)
 #define CANFRAME_FILL_VALUE 						(0x55)
@@ -82,6 +85,13 @@ typedef struct CANFrame_HandlerStruct{
 	osThreadId_t rcvHandler_Th;
 	void (*ReceiveDataCB) (CANFrame_RxHeaderTypedef*, uint8_t* );
 	CANFrame_RcvInfoTypedef _RxRcvInfo[CANFRAME_MAX_NODE];
+#ifdef CANFRAME_ENABLE_COUNTER
+	uint32_t SendSuccessCounter;
+	uint32_t SendFailedCounter;
+	uint32_t RcvSucessCounter;
+	uint32_t RcvFailedCounter;
+#endif
+
 }CANFrame_HandlerStruct;
 
 

@@ -1,6 +1,6 @@
 #include <CANFrame/CANFrame.h>
 #include <string.h>
-
+#include "CRC/CRC.h"
 
 #define CANFRAME_GETMSGTYPE_FROMID(CANID)		((CANID>> 7) 	& 0x0f)
 #define CANFRAME_GETTARGETNODE_FROMID(CANID)	((CANID>> 3) 	& 0x0f)
@@ -25,7 +25,8 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 	uint8_t MsgType =	CANFRAME_GETMSGTYPE_FROMID(RxHeader->StdId);
 	uint8_t CurrentFrameType = RcvInfo->CurrentFrameType;
 //	SyncPrintf("Rcv Frame Type %d CurrentFrameType %d \r\n", RcvFrameType, CurrentFrameType);
-
+	uint8_t Receive_CRC;
+	uint8_t Calc_CRC;
 	if(CurrentFrameType == 0)
 	{
 		// Empty buffer not receive any frame
@@ -47,6 +48,17 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 				CpyLen = RcvInfo->ExpectedLen;
 				memcpy(RcvInfo->Data + RcvInfo->ReceivedLen, RxData + 2, CpyLen);
 				RcvInfo->ReceivedLen += CpyLen;
+#ifdef CANFRAME_ENABLE_COUNTER
+				Receive_CRC = RxData[CpyLen + 2];
+				Calc_CRC = crc_8(RcvInfo->Data, RcvInfo->ExpectedLen);
+				if(Receive_CRC == Calc_CRC)
+				{
+					CANHandler->RcvSucessCounter++;
+				}else
+				{
+					CANHandler->RcvFailedCounter++;
+				}
+#endif
 				return RcvInfo;
 			default:
 				break;
@@ -57,6 +69,9 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 		if(RcvInfo->MsgType != MsgType)
 		{
 			CANFrame_ClearRcvInfo(RcvInfo);
+#ifdef CANFRAME_ENABLE_COUNTER
+				CANHandler->RcvFailedCounter++;
+#endif
 		}
 		if(RcvFrameType == CANFRAME_FRAMETYPE_END)
 		{
@@ -70,11 +85,26 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 //			}
 			memcpy(RcvInfo->Data + RcvInfo->ReceivedLen, RxData + 1, remainLen);
 			RcvInfo->ReceivedLen += remainLen;
+
+#ifdef CANFRAME_ENABLE_COUNTER
+				Receive_CRC = RxData[remainLen + 1];
+				Calc_CRC = crc_8(RcvInfo->Data, RcvInfo->ExpectedLen);
+				if(Receive_CRC == Calc_CRC)
+				{
+					CANHandler->RcvSucessCounter++;
+				}else
+				{
+					CANHandler->RcvFailedCounter++;
+				}
+#endif
 //			SyncPrintf("CpyLen %d ReceivedLen %d ExpectedLen %d\r\n", CpyLen, RcvInfo->ReceivedLen, RcvInfo->ExpectedLen);
 			return RcvInfo;
 		}
 		else if (RcvFrameType != CurrentFrameType + 1 )
 		{
+#ifdef CANFRAME_ENABLE_COUNTER
+				CANHandler->RcvFailedCounter++;
+#endif
 			CANFrame_ClearRcvInfo(RcvInfo);
 			return NULL;
 		}
@@ -87,7 +117,6 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 			memcpy(RcvInfo->Data + RcvInfo->ReceivedLen, RxData + 1, CpyLen);
 			RcvInfo->ReceivedLen += CpyLen;
 //			SyncPrintf("CpyLen %d ReceivedLen %d ExpectedLen %d\r\n", CpyLen, RcvInfo->ReceivedLen, RcvInfo->ExpectedLen);
-
 			return NULL;
 		}
 	}
@@ -192,6 +221,7 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 	uint8_t isFirstFrame = 1;
 	uint8_t isLastFrame=0;
 	uint32_t startTime = osKernelGetTickCount();
+	uint8_t calcCRC = crc_8(Data, DataLength);
 	int waitTime;
 
 	if( CANFrame_txHeader->DataLen > CANFRAME_MAX_BUFFER_SIZE)
@@ -219,6 +249,8 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 		/*Check if frame data is not fill, add FILL byte until frame full 8bytes------*/
 		if (FrameIndex == CANFRAME_MAX_DATA_LENGTH || i == DataLength - 1)
 		{
+			TxFrame[FrameIndex] = calcCRC;
+			FrameIndex++;
 			while (FrameIndex < CANFRAME_MAX_DATA_LENGTH)
 			{
 				TxFrame[FrameIndex] = CANFRAME_FILL_VALUE;
@@ -229,6 +261,7 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 			{
 				isLastFrame=1;
 				CAN_TxHeader.StdId = ID_NUM | CANFRAME_FRAMETYPE_END;
+
 			}
 			if(isLastFrame==0){
 				CAN_TxHeader.StdId =ID_NUM | Frame_type;
@@ -240,12 +273,18 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 			if (waitTime < 0)
 			{
 				osSemaphoreRelease(canhandler->TxSem);
+#ifdef CANFRAME_ENABLE_COUNTER
+				canhandler->SendFailedCounter++;
+#endif
 				return osErrorTimeout;
 			}
 			Status = CAN_OS_Transmit(canhandler->CAN, &CAN_TxHeader, TxFrame, &Txmailbox, waitTime);
 			if(Status != osOK)
 			{
 				osSemaphoreRelease(canhandler->TxSem);
+#ifdef CANFRAME_ENABLE_COUNTER
+				canhandler->SendFailedCounter++;
+#endif
 				return Status;
 			}
 			memset(TxFrame, 0, CANFRAME_MAX_DATA_LENGTH);
@@ -256,8 +295,10 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 			Frame_type++;
 		}
 	}
-
 	osSemaphoreRelease(canhandler->TxSem);
+#ifdef CANFRAME_ENABLE_COUNTER
+	canhandler->SendSuccessCounter++;
+#endif
 	return osOK;
 }
 
