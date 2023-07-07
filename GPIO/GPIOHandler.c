@@ -34,3 +34,8 @@ void GPIO_WritePin(GPIO_HandlerStruct GPIO, uint32_t PinState)
 	return HAL_GPIO_WritePin(GPIO.Port, GPIO.Pin, PinState);
 }
 
+int GPIO_ReadPin(GPIO_HandlerStruct GPIO)
+{
+	return HAL_GPIO_ReadPin(GPIO.Port, GPIO.Pin);
+}
+
