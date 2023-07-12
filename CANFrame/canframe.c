@@ -54,9 +54,11 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 				if(Receive_CRC == Calc_CRC)
 				{
 					CANHandler->RcvSucessCounter++;
+
 				}else
 				{
 					CANHandler->RcvFailedCounter++;
+					return NULL;
 				}
 #endif
 				return RcvInfo;
@@ -95,6 +97,8 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 				}else
 				{
 					CANHandler->RcvFailedCounter++;
+					return NULL;
+
 				}
 #endif
 //			SyncPrintf("CpyLen %d ReceivedLen %d ExpectedLen %d\r\n", CpyLen, RcvInfo->ReceivedLen, RcvInfo->ExpectedLen);
@@ -111,7 +115,6 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 		else
 		{
 //			SyncPrintf("Frame Type %d\r\n", RcvFrameType);
-
 			RcvInfo->CurrentFrameType = RcvFrameType;
 			CpyLen = 7;
 			memcpy(RcvInfo->Data + RcvInfo->ReceivedLen, RxData + 1, CpyLen);
@@ -120,7 +123,6 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 			return NULL;
 		}
 	}
-
 }
 
 void CANFrame_RcvTask(void* arg)
@@ -149,7 +151,7 @@ void CANFrame_RcvTask(void* arg)
 		{
 			continue;
 		}
-//		SyncPrintf("LightGPS Rcv ID 0x%.2x len %d: ", CAN_RxHeader.StdId, CAN_RxHeader.DLC);
+//		SyncPrintf("Power Rcv ID 0x%.2lx len %ld: ", CAN_RxHeader.StdId, CAN_RxHeader.DLC);
 //		for(uint8_t i = 0; i<8; i++)
 //		{
 //			SyncPrintf("%d ", RxData[i]);
@@ -168,7 +170,7 @@ void CANFrame_RcvTask(void* arg)
 			CANFrame_RxHeader.MessageType = rcvInfo->MsgType;
 			CANFrame_RxHeader.senderID = senderID;
 //			SyncPrintf("LightGPS Rcv from ID 0x%.2x len %d: \r\n", senderID, CANFrame_RxHeader.DataLen);
-//			for(uint8_t i = CANFrame_RxHeader.DataLen -20 ; i< CANFrame_RxHeader.DataLen - 15 ; i++)
+//			for(uint8_t i = 0 ; i< CANFrame_RxHeader.DataLen; i++)
 //			{
 //				SyncPrintf("%d ", rcvInfo->Data[i]);
 //			}
