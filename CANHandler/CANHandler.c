@@ -24,7 +24,7 @@ int CAN_OS_ActivateNotification(CAN_OS_HandlerStruct* CANHandler, uint32_t Activ
 
 int CAN_OS_Start(CAN_OS_HandlerStruct* CANHandler)
 {
-	CAN_OS_ActivateNotification(CANHandler, CAN_IT_TX_MAILBOX_EMPTY);
+//	CAN_OS_ActivateNotification(CANHandler, CAN_IT_TX_MAILBOX_EMPTY);
 
 	return HAL_CAN_Start(CANHandler->hcan);
 }
@@ -54,15 +54,26 @@ int CAN_OS_Transmit(CAN_OS_HandlerStruct* CANHandler, const CAN_TxHeaderTypeDef 
 {
 	int Status;
 	CAN_MailboxSync(CANHandler);
+	uint32_t StartTime = osKernelGetTickCount();
 	Status = osSemaphoreAcquire(CANHandler->TxSemaphore, timeout);
 	if(Status == osErrorTimeout) return HAL_TIMEOUT;
 	Status = HAL_CAN_AddTxMessage(CANHandler->hcan, txHeader, txData, txMailbox);
 
-
 	if (Status != HAL_OK){
 		osSemaphoreRelease(CANHandler->TxSemaphore);
+		return osError;
 	}
-	return Status == HAL_OK? osOK: osError;
+	while(HAL_CAN_IsTxMessagePending(CANHandler->hcan, *txMailbox))
+	{
+		if (osKernelGetTickCount() - StartTime > timeout)
+		{
+			osSemaphoreRelease(CANHandler->TxSemaphore);
+			return osErrorTimeout;
+		}
+	}
+	osSemaphoreRelease(CANHandler->TxSemaphore);
+
+	return osOK;
 }
 
 //int CAN_OS_WaitMailboxEmpty(CAN_OS_HandlerStruct* CANHandler, uint32_t Mailbox, uint32_t timeout)

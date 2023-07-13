@@ -227,6 +227,7 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 	uint8_t Frame_type = CANFRAME_FRAMETYPE_FIRST;
 
 	/*Implement send data----------------------------------------------------------*/
+	uint8_t TxBuffer[CANFRAME_MAX_BUFFER_SIZE] = {0};
 	uint8_t TxFrame[CANFRAME_MAX_DATA_LENGTH] = {0};
 	uint32_t FrameIndex = 0;
 	uint32_t DataLength = CANFrame_txHeader->DataLen;
@@ -242,7 +243,8 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 	}
 	/*Add nodeID vs Data length at first frame -----------------------------------*/
 #ifdef CANFRAME_ENABLE_COUNTER
-	Data[DataLength] = calcCRC;
+	memcpy(TxBuffer, Data, DataLength);
+	TxBuffer[DataLength] = calcCRC;
 	DataLength++;
 #endif
 
@@ -250,7 +252,7 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 
 	for (int i = 0; i < DataLength; i++)
 	{
-		uint8_t byte = Data[i];
+		uint8_t byte = TxBuffer[i];
 		if (isFirstFrame)
 		{
 			TxFrame[FrameIndex] = canhandler->nodeID;
@@ -265,8 +267,7 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 		/*Check if frame data is not fill, add FILL byte until frame full 8bytes------*/
 		if (FrameIndex == CANFRAME_MAX_DATA_LENGTH || i == DataLength - 1)
 		{
-			TxFrame[FrameIndex] = calcCRC;
-			FrameIndex++;
+
 			while (FrameIndex < CANFRAME_MAX_DATA_LENGTH)
 			{
 				TxFrame[FrameIndex] = CANFRAME_FILL_VALUE;
@@ -284,7 +285,6 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 			}
 			/*---------send data-----------------------------------------------------------*/
 
-			if(CANFrame_txHeader->DataLen > 20) osDelay(1);
 			waitTime = timeout - (osKernelGetTickCount() - startTime);
 			if (waitTime < 0)
 			{
@@ -295,6 +295,7 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 				return osErrorTimeout;
 			}
 			Status = CAN_OS_Transmit(canhandler->CAN, &CAN_TxHeader, TxFrame, &Txmailbox, waitTime);
+			if(DataLength > 20) osDelay(1);
 			if(Status != osOK)
 			{
 				osSemaphoreRelease(canhandler->TxSem);
