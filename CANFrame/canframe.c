@@ -35,7 +35,7 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 			return NULL;
 		}
 		CANFrame_ClearRcvInfo(RcvInfo);
-		RcvInfo->ExpectedLen = RxData[1] - 1;
+		RcvInfo->ExpectedLen = RxData[1];
 		RcvInfo->MsgType = MsgType;
 		RcvInfo->CurrentFrameType = RcvFrameType;
 		switch (RcvFrameType) {
@@ -164,7 +164,7 @@ void CANFrame_RcvTask(void* arg)
 //		SyncPrintf("Power Rcv ID 0x%.2lx len %ld: ", CAN_RxHeader.StdId, CAN_RxHeader.DLC);
 //		for(uint8_t i = 0; i<8; i++)
 //		{
-//			SyncPrintf("%d ", RxData[i]);
+//			SyncPrintf("0x%.2x ", RxData[i]);
 //		}
 //		SyncPrintf("\r\n");
 		TargetNode = CANFRAME_GETTARGETNODE_FROMID(CAN_RxHeader.StdId);
