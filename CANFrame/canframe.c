@@ -35,7 +35,7 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 			return NULL;
 		}
 		CANFrame_ClearRcvInfo(RcvInfo);
-		RcvInfo->ExpectedLen = RxData[1];
+		RcvInfo->ExpectedLen = RxData[1] - 1;
 		RcvInfo->MsgType = MsgType;
 		RcvInfo->CurrentFrameType = RcvFrameType;
 		switch (RcvFrameType) {
@@ -49,7 +49,10 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 				memcpy(RcvInfo->Data + RcvInfo->ReceivedLen, RxData + 2, CpyLen);
 				RcvInfo->ReceivedLen += CpyLen;
 #ifdef CANFRAME_ENABLE_COUNTER
-				Receive_CRC = RxData[CpyLen + 2];
+//				Receive_CRC = RxData[CpyLen + 2];
+				RcvInfo->ExpectedLen-=1;
+				Receive_CRC = RcvInfo->Data[RcvInfo->ExpectedLen];
+				RcvInfo->Data[RcvInfo->ExpectedLen] = 0;
 				Calc_CRC = crc_8(RcvInfo->Data, RcvInfo->ExpectedLen);
 				if(Receive_CRC == Calc_CRC)
 				{
@@ -57,6 +60,7 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 
 				}else
 				{
+					SyncPrintf("Invalid CRC\r\n");
 					CANHandler->RcvFailedCounter++;
 					return NULL;
 				}
@@ -72,6 +76,7 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 		{
 			CANFrame_ClearRcvInfo(RcvInfo);
 #ifdef CANFRAME_ENABLE_COUNTER
+				SyncPrintf("Not same MsgType\r\n");
 				CANHandler->RcvFailedCounter++;
 #endif
 		}
@@ -89,13 +94,17 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 			RcvInfo->ReceivedLen += remainLen;
 
 #ifdef CANFRAME_ENABLE_COUNTER
-				Receive_CRC = RxData[remainLen + 1];
+				RcvInfo->ExpectedLen-=1;
+				Receive_CRC = RcvInfo->Data[RcvInfo->ExpectedLen];
+				RcvInfo->Data[RcvInfo->ExpectedLen] = 0;
+
 				Calc_CRC = crc_8(RcvInfo->Data, RcvInfo->ExpectedLen);
 				if(Receive_CRC == Calc_CRC)
 				{
 					CANHandler->RcvSucessCounter++;
 				}else
 				{
+					SyncPrintf("Invalid CRC Calc 0x%.2x Rcv 0x%2x\r\n", Calc_CRC, Receive_CRC);
 					CANHandler->RcvFailedCounter++;
 					return NULL;
 
@@ -107,6 +116,7 @@ static CANFrame_RcvInfoTypedef* CANFrame_ProcessData(CANFrame_HandlerStruct* CAN
 		else if (RcvFrameType != CurrentFrameType + 1 )
 		{
 #ifdef CANFRAME_ENABLE_COUNTER
+			SyncPrintf("FrameType not contiguos\r\n");
 				CANHandler->RcvFailedCounter++;
 #endif
 			CANFrame_ClearRcvInfo(RcvInfo);
@@ -231,6 +241,10 @@ int CANFrame_Send(CANFrame_HandlerStruct* canhandler, CANFrame_TxHeaderTypedef* 
 		return osErrorParameter;
 	}
 	/*Add nodeID vs Data length at first frame -----------------------------------*/
+#ifdef CANFRAME_ENABLE_COUNTER
+	Data[DataLength] = calcCRC;
+	DataLength++;
+#endif
 
 	osSemaphoreAcquire(canhandler->TxSem, timeout);
 

@@ -5,7 +5,7 @@
 #define CAN_MUTIFRAME_H
 
 #define CANFRAME_ENABLE_COUNTER
-
+//#define CANFRAME_ENABE_CRC
 
 #define CANFRAME_MAX_NODE							13
 #define CANFRAME_MAX_DATA_LENGTH 					(0x08)
