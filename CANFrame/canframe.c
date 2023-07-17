@@ -185,8 +185,9 @@ void CANFrame_RcvTask(void* arg)
 //				SyncPrintf("%d ", rcvInfo->Data[i]);
 //			}
 //			SyncPrintf("\r\n");
+//			SyncPrintf("%s \r\n", rcvInfo->Data);
 			rcvInfo->Data[CANFrame_RxHeader.DataLen] = 0;
-			SyncPrintf("%s \r\n", rcvInfo->Data);
+
 			if(CANHandler->ReceiveDataCB != NULL)
 			{
 				CANHandler->ReceiveDataCB(&CANFrame_RxHeader, rcvInfo->Data);
